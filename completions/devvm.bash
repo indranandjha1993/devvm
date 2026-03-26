@@ -4,7 +4,7 @@ _devvm() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="init provision up down stop start restart reboot destroy ssh run exec open status service obs debug db ports verify version help"
+  commands="init provision up down stop start restart reboot destroy ssh run exec open status service obs debug db creds app ports verify version help"
 
   case "$prev" in
     devvm)
@@ -24,6 +24,12 @@ _devvm() {
       ;;
     service|svc)
       COMPREPLY=($(compgen -W "start stop restart status logs" -- "$cur"))
+      ;;
+    creds)
+      COMPREPLY=($(compgen -W "list show set reset" -- "$cur"))
+      ;;
+    app)
+      COMPREPLY=($(compgen -W "add remove list start stop restart logs create" -- "$cur"))
       ;;
   esac
 }

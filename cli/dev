@@ -3,9 +3,10 @@
 # https://github.com/indranandjha/dev-vm
 set -euo pipefail
 
-readonly VERSION="1.0.0"
+readonly VERSION="2.0.0"
 readonly VM_NAME="dev"
 readonly VM_TARGET="/opt/dev-vm"
+readonly VM_CONFIG="$VM_TARGET/config"
 readonly OBS_COMPOSE="$VM_TARGET/observability/docker-compose.yml"
 readonly HOST="dev.orb.local"
 
@@ -302,6 +303,24 @@ cmd_status() {
     dot "$(svc_status "$svc")" "$svc"
   done
 
+  # Show registered apps
+  local apps_json
+  apps_json=$(_apps_read 2>/dev/null) || apps_json='{"apps":{}}'
+  local app_count
+  app_count=$(echo "$apps_json" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('apps',{})))" 2>/dev/null) || app_count=0
+  if [[ "$app_count" -gt 0 ]]; then
+    echo ""
+    echo -e "${B}Applications${N}"
+    echo "$apps_json" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for name in d.get('apps', {}):
+    print(name)
+" | while read -r aname; do
+      dot "$(svc_status "app-${aname}" 2>/dev/null)" "$aname"
+    done
+  fi
+
   echo ""
   cmd_ports
 }
@@ -452,16 +471,481 @@ cmd_db() {
   local db="${1:-}"
   shift 2>/dev/null || true
 
+  # Read credentials from config (fallback to defaults)
+  local creds
+  creds=$(_creds_read 2>/dev/null) || creds='{}'
+  local my_user my_pass pg_user pg_pass pg_db
+  my_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mysql',{}).get('user','dev'))" 2>/dev/null) || my_user="dev"
+  my_pass=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mysql',{}).get('pass','dev'))" 2>/dev/null) || my_pass="dev"
+  pg_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('user','dev'))" 2>/dev/null) || pg_user="dev"
+  pg_db=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('db','devdb'))" 2>/dev/null) || pg_db="devdb"
+
   case "$db" in
-    mysql)          vm mysql -u dev -pdev "$@" ;;
-    psql|postgres)  vm psql -U dev devdb "$@" ;;
+    mysql)          vm mysql -u "$my_user" -p"$my_pass" "$@" ;;
+    psql|postgres)  vm psql -U "$pg_user" "$pg_db" "$@" ;;
     redis)          vm redis-cli "$@" ;;
     *)
       echo "Usage: devvm db <mysql|psql|redis> [args...]"
+      ;;
+  esac
+}
+
+# ── Credentials ───────────────────────────────────────────────────────────────
+
+_creds_read() {
+  vm_sudo python3 -c "
+import json, sys
+with open('$VM_CONFIG/credentials.json') as f:
+    print(json.dumps(json.load(f)))
+" 2>/dev/null
+}
+
+_creds_write() {
+  local json_str="$1"
+  vm_sudo python3 -c "
+import json
+data = json.loads('$json_str')
+with open('$VM_CONFIG/credentials.json', 'w') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null
+}
+
+cmd_creds() {
+  ensure_running
+  local action="${1:-list}"
+  shift 2>/dev/null || true
+
+  case "$action" in
+    list)
+      local creds
+      creds=$(_creds_read) || die "Cannot read credentials. Run 'devvm provision' first."
+      echo -e "${B}Credentials${N}"
       echo ""
-      echo "  mysql     dev:dev@:3306"
-      echo "  psql      dev:dev@:5432/devdb"
-      echo "  redis     :6379 (no auth)"
+      echo "$creds" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+for name, info in c.items():
+    parts = []
+    if 'user' in info: parts.append(f\"user={info['user']}\")
+    if 'pass' in info:
+        p = info['pass']
+        masked = p[:1] + '***' if p else '(none)'
+        parts.append(f\"pass={masked}\")
+    if 'db' in info: parts.append(f\"db={info['db']}\")
+    if 'port' in info: parts.append(f\"port={info['port']}\")
+    print(f'  {name:12s} {\"  \".join(parts)}')
+"
+      ;;
+
+    show)
+      local svc="${1:-}"
+      [[ -n "$svc" ]] || die "Usage: devvm creds show <mysql|postgres|redis|grafana>"
+      local creds
+      creds=$(_creds_read) || die "Cannot read credentials."
+      echo "$creds" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+name = '$svc'
+if name not in c:
+    print(f'Unknown service: {name}', file=sys.stderr); sys.exit(1)
+info = c[name]
+for k, v in info.items():
+    print(f'  {k:8s} {v}')
+"
+      ;;
+
+    set)
+      local svc="${1:-}"
+      shift 2>/dev/null || true
+      [[ -n "$svc" ]] || die "Usage: devvm creds set <mysql|postgres|redis|grafana> --user X --pass Y [--db Z]"
+
+      local user="" pass="" db=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --user) user="$2"; shift 2 ;;
+          --pass) pass="$2"; shift 2 ;;
+          --db)   db="$2"; shift 2 ;;
+          *) die "Unknown flag: $1" ;;
+        esac
+      done
+
+      [[ -n "$user" || -n "$pass" || -n "$db" ]] || die "Provide --user, --pass, or --db"
+
+      local creds
+      creds=$(_creds_read) || die "Cannot read credentials."
+
+      # Update JSON
+      local updated
+      updated=$(echo "$creds" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+name = '$svc'
+if name not in c:
+    print(json.dumps(c)); sys.exit(0)
+if '$user': c[name]['user'] = '$user'
+if '$pass': c[name]['pass'] = '$pass'
+if '$db' and 'db' in c[name]: c[name]['db'] = '$db'
+print(json.dumps(c))
+")
+      _creds_write "$updated"
+
+      # Apply changes to actual services
+      case "$svc" in
+        mysql)
+          local u="${user:-dev}" p="${pass:-dev}"
+          vm_sudo mysql -u root -e "ALTER USER '${u}'@'%' IDENTIFIED BY '${p}';" 2>/dev/null || true
+          vm_sudo mysql -u root -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+          ok "MySQL credentials updated."
+          ;;
+        postgres)
+          local u="${user:-dev}" p="${pass:-dev}"
+          vm_sudo bash -c "sudo -u postgres psql -c \"ALTER USER ${u} WITH PASSWORD '${p}';\"" 2>/dev/null || true
+          ok "PostgreSQL credentials updated."
+          ;;
+        redis)
+          if [[ -n "$pass" ]]; then
+            vm_sudo bash -c "sed -i 's/^# requirepass.*/requirepass $pass/' /etc/redis/redis.conf; sed -i 's/^requirepass.*/requirepass $pass/' /etc/redis/redis.conf"
+            vm_sudo systemctl restart redis-server 2>/dev/null || true
+            ok "Redis password updated."
+          fi
+          ;;
+        grafana)
+          ok "Grafana credentials updated in config. Restart Grafana to apply: devvm obs restart grafana"
+          ;;
+      esac
+      ;;
+
+    reset)
+      local svc="${1:-}"
+      [[ -n "$svc" ]] || die "Usage: devvm creds reset <mysql|postgres|redis|grafana>"
+
+      local defaults='{"mysql":{"user":"dev","pass":"dev","host":"127.0.0.1","port":3306,"db":"devdb"},"postgres":{"user":"dev","pass":"dev","host":"127.0.0.1","port":5432,"db":"devdb"},"redis":{"pass":"","host":"127.0.0.1","port":6379},"grafana":{"user":"admin","pass":"admin","port":3000}}'
+
+      local creds
+      creds=$(_creds_read) || die "Cannot read credentials."
+
+      local updated
+      updated=$(python3 -c "
+import json
+c = json.loads('$creds')
+d = json.loads('$defaults')
+name = '$svc'
+if name in d: c[name] = d[name]
+print(json.dumps(c))
+")
+      _creds_write "$updated"
+
+      # Apply reset
+      case "$svc" in
+        mysql)
+          vm_sudo mysql -u root -e "ALTER USER 'dev'@'%' IDENTIFIED BY 'dev'; FLUSH PRIVILEGES;" 2>/dev/null || true
+          ;;
+        postgres)
+          vm_sudo bash -c "sudo -u postgres psql -c \"ALTER USER dev WITH PASSWORD 'dev';\"" 2>/dev/null || true
+          ;;
+        redis)
+          vm_sudo bash -c "sed -i 's/^requirepass.*/# requirepass/' /etc/redis/redis.conf"
+          vm_sudo systemctl restart redis-server 2>/dev/null || true
+          ;;
+      esac
+      ok "$svc credentials reset to defaults."
+      ;;
+
+    *)
+      echo "Usage: devvm creds <list|show|set|reset> [service] [flags]"
+      echo ""
+      echo "  list                         Show all credentials (masked)"
+      echo "  show <service>               Show full credentials"
+      echo "  set <service> --user X --pass Y [--db Z]"
+      echo "  reset <service>              Reset to defaults"
+      echo ""
+      echo "Services: mysql, postgres, redis, grafana"
+      ;;
+  esac
+}
+
+# ── Applications ──────────────────────────────────────────────────────────────
+
+_apps_read() {
+  vm_sudo cat "$VM_CONFIG/apps.json" 2>/dev/null
+}
+
+_apps_write() {
+  local json_str="$1"
+  vm_sudo python3 -c "
+import json
+data = json.loads('''$json_str''')
+with open('$VM_CONFIG/apps.json', 'w') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null
+}
+
+_app_start_cmd() {
+  local app_type="$1" port="$2" path="$3" custom_cmd="${4:-}"
+  case "$app_type" in
+    laravel)     echo "/usr/bin/php artisan serve --host=0.0.0.0 --port=$port" ;;
+    wordpress)   echo "/usr/bin/php -S 0.0.0.0:$port" ;;
+    django)      echo "/usr/bin/python3 manage.py runserver 0.0.0.0:$port" ;;
+    flask)       echo "/usr/bin/python3 -m flask run --host=0.0.0.0 --port=$port" ;;
+    fastapi)     echo "/usr/local/bin/uvicorn main:app --host 0.0.0.0 --port $port" ;;
+    express)     echo "/usr/local/share/fnm/node-versions/v22.22.2/installation/bin/node app.js" ;;
+    nextjs)      echo "/usr/local/share/fnm/node-versions/v22.22.2/installation/bin/npx next dev -p $port" ;;
+    spring-boot) echo "/usr/bin/java -jar *.jar --server.port=$port" ;;
+    go)          echo "/usr/local/go/bin/go run ." ;;
+    static)      echo "" ;; # Nginx serves directly
+    custom)      echo "$custom_cmd" ;;
+    *)           echo "" ;;
+  esac
+}
+
+cmd_app() {
+  ensure_running
+  local action="${1:-list}"
+  shift 2>/dev/null || true
+
+  case "$action" in
+    add)
+      local name="" path="" type="" port="" cmd_override=""
+      # First positional arg is the name
+      [[ $# -gt 0 && ! "$1" =~ ^-- ]] && { name="$1"; shift; }
+
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --path) path="$2"; shift 2 ;;
+          --type) type="$2"; shift 2 ;;
+          --port) port="$2"; shift 2 ;;
+          --cmd)  cmd_override="$2"; shift 2 ;;
+          *) die "Unknown flag: $1" ;;
+        esac
+      done
+
+      [[ -n "$name" ]] || die "Usage: devvm app add <name> --path <dir> --type <type> [--port N] [--cmd 'custom command']"
+      [[ -n "$path" ]] || die "Missing --path"
+      [[ -n "$type" ]] || die "Missing --type (laravel|wordpress|django|flask|fastapi|express|nextjs|spring-boot|go|static|custom)"
+
+      # Auto-assign port if not specified
+      if [[ -z "$port" ]]; then
+        local apps_json
+        apps_json=$(_apps_read)
+        port=$(echo "$apps_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('next_port', 8001))")
+      fi
+
+      info "Registering $name ($type) on port $port..."
+
+      # Generate systemd service (skip for static — Nginx serves directly)
+      local start_cmd
+      start_cmd=$(_app_start_cmd "$type" "$port" "$path" "$cmd_override")
+
+      if [[ -n "$start_cmd" ]]; then
+        vm_sudo bash -c "cat > /etc/systemd/system/app-${name}.service << SVCEOF
+[Unit]
+Description=DevVM App: $name
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$path
+ExecStart=$start_cmd
+Restart=always
+RestartSec=5
+Environment=PORT=$port
+Environment=PATH=/usr/local/share/fnm/node-versions/v22.22.2/installation/bin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
+Environment=FLASK_APP=app.py
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF"
+        vm_sudo systemctl daemon-reload
+        vm_sudo systemctl enable --now "app-${name}" 2>/dev/null || true
+      fi
+
+      # Generate Nginx vhost
+      if [[ "$type" == "static" ]]; then
+        vm_sudo bash -c "cat > /etc/nginx/sites-available/${name}.conf << NGXEOF
+server {
+    listen 80;
+    server_name ${name}.dev.local;
+    root $path;
+    index index.html;
+    location / { try_files \\\$uri \\\$uri/ =404; }
+}
+NGXEOF"
+      else
+        vm_sudo bash -c "cat > /etc/nginx/sites-available/${name}.conf << NGXEOF
+server {
+    listen 80;
+    server_name ${name}.dev.local;
+    location / {
+        proxy_pass http://127.0.0.1:$port;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+    }
+}
+NGXEOF"
+      fi
+      vm_sudo ln -sf "/etc/nginx/sites-available/${name}.conf" "/etc/nginx/sites-enabled/${name}.conf"
+      vm_sudo nginx -t 2>/dev/null && vm_sudo systemctl reload nginx
+
+      # Update apps.json
+      local apps_json
+      apps_json=$(_apps_read)
+      local updated
+      updated=$(echo "$apps_json" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+d['apps']['$name'] = {'path': '$path', 'type': '$type', 'port': $port}
+d['next_port'] = max(d.get('next_port', 8001), $port + 1)
+print(json.dumps(d))
+")
+      _apps_write "$updated"
+
+      ok "$name registered and running."
+      echo "  URL:  http://${name}.dev.local"
+      echo "  Port: $port"
+      ;;
+
+    remove)
+      local name="${1:-}"
+      [[ -n "$name" ]] || die "Usage: devvm app remove <name>"
+
+      vm_sudo systemctl stop "app-${name}" 2>/dev/null || true
+      vm_sudo systemctl disable "app-${name}" 2>/dev/null || true
+      vm_sudo rm -f "/etc/systemd/system/app-${name}.service"
+      vm_sudo systemctl daemon-reload 2>/dev/null || true
+      vm_sudo rm -f "/etc/nginx/sites-available/${name}.conf" "/etc/nginx/sites-enabled/${name}.conf"
+      vm_sudo systemctl reload nginx 2>/dev/null || true
+
+      local apps_json
+      apps_json=$(_apps_read)
+      local updated
+      updated=$(echo "$apps_json" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+d['apps'].pop('$name', None)
+print(json.dumps(d))
+")
+      _apps_write "$updated"
+
+      ok "$name removed."
+      ;;
+
+    list)
+      local apps_json
+      apps_json=$(_apps_read) || { echo "No apps registered."; return; }
+
+      local count
+      count=$(echo "$apps_json" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('apps',{})))")
+
+      if [[ "$count" == "0" ]]; then
+        echo "No apps registered. Use 'devvm app add' to register one."
+        return
+      fi
+
+      echo -e "${B}Applications${N}"
+      echo ""
+      printf "  ${D}%-15s %-12s %-6s %-25s %s${N}\n" "NAME" "TYPE" "PORT" "URL" "STATUS"
+      echo "$apps_json" | python3 -c "
+import json, sys, subprocess
+d = json.load(sys.stdin)
+for name, info in d.get('apps', {}).items():
+    print(f\"{name}|{info['type']}|{info['port']}|http://{name}.dev.local\")
+" | while IFS='|' read -r aname atype aport aurl; do
+        local st
+        st=$(svc_status "app-${aname}" 2>/dev/null)
+        local color="${G}"
+        [[ "$st" == "active" ]] || color="${R}"
+        printf "  %-15s %-12s %-6s %-25s ${color}%s${N}\n" "$aname" "$atype" "$aport" "$aurl" "$st"
+      done
+      ;;
+
+    start|stop|restart)
+      local name="${1:-}"
+      [[ -n "$name" ]] || die "Usage: devvm app $action <name>"
+      vm_sudo systemctl "$action" "app-${name}"
+      ok "$name: $action done."
+      ;;
+
+    logs)
+      local name="${1:-}"
+      [[ -n "$name" ]] || die "Usage: devvm app logs <name>"
+      vm_sudo journalctl -u "app-${name}" --no-pager -f
+      ;;
+
+    create)
+      local name="" template=""
+      [[ $# -gt 0 && ! "$1" =~ ^-- ]] && { name="$1"; shift; }
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --template|-t) template="$2"; shift 2 ;;
+          *) die "Unknown flag: $1" ;;
+        esac
+      done
+
+      [[ -n "$name" ]] || die "Usage: devvm app create <name> --template <type>"
+      [[ -n "$template" ]] || die "Missing --template (laravel|django|flask|fastapi|express|nextjs|go-web|static|wordpress)"
+
+      local target_path="$HOME/projects/$name"
+      mkdir -p "$target_path"
+
+      info "Scaffolding $name with $template..."
+
+      case "$template" in
+        laravel)
+          vm bash -c "cd $(dirname "$target_path") && composer create-project laravel/laravel $name" || die "Laravel scaffold failed"
+          ;;
+        django)
+          vm bash -c "cd $target_path && python3 -m django startproject $name ." || die "Django scaffold failed"
+          ;;
+        nextjs)
+          vm bash -c "export PATH=/usr/local/share/fnm/node-versions/v22.22.2/installation/bin:\$PATH && cd $(dirname "$target_path") && npx create-next-app@latest $name --yes" || die "Next.js scaffold failed"
+          ;;
+        wordpress)
+          vm bash -c "cd $target_path && curl -sO https://wordpress.org/latest.tar.gz && tar xzf latest.tar.gz --strip-components=1 && rm latest.tar.gz" || die "WordPress download failed"
+          ;;
+        flask|fastapi|express|go-web|static)
+          # Copy built-in templates
+          local tpl_dir
+          tpl_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../provision/templates/$template"
+          if [[ -d "$tpl_dir" ]]; then
+            cp -r "$tpl_dir"/* "$target_path/"
+            # Replace APP_NAME placeholder
+            find "$target_path" -type f -exec sed -i '' "s/APP_NAME/$name/g" {} \; 2>/dev/null || true
+          else
+            die "Template not found: $template"
+          fi
+          # Install deps for node templates
+          if [[ "$template" == "express" ]]; then
+            vm bash -c "export PATH=/usr/local/share/fnm/node-versions/v22.22.2/installation/bin:\$PATH && cd $target_path && npm install" 2>/dev/null || true
+          fi
+          ;;
+        *)
+          die "Unknown template: $template"
+          ;;
+      esac
+
+      ok "Created $name at $target_path"
+
+      # Auto-register it
+      local app_type="$template"
+      [[ "$template" == "go-web" ]] && app_type="go"
+      cmd_app add "$name" --path "$target_path" --type "$app_type"
+      ;;
+
+    *)
+      echo "Usage: devvm app <add|remove|list|start|stop|restart|logs|create>"
+      echo ""
+      echo "  add <name> --path <dir> --type <type> [--port N]"
+      echo "  remove <name>"
+      echo "  list"
+      echo "  start|stop|restart <name>"
+      echo "  logs <name>"
+      echo "  create <name> --template <type>"
+      echo ""
+      echo "Types: laravel, wordpress, django, flask, fastapi, express, nextjs, spring-boot, go, static, custom"
+      echo ""
+      echo "Templates (for create): laravel, django, flask, fastapi, express, nextjs, go-web, static, wordpress"
       ;;
   esac
 }
@@ -548,6 +1032,8 @@ ${B}SERVICES${N}
 ${B}DEVELOP${N}
   debug <lang> [file]      Start remote debugger (python|node|php|go|java)
   db <engine> [args]       Connect to database (mysql|psql|redis)
+  creds [show|set|reset]   View and manage database credentials
+  app <action> [name]      Manage hosted applications
 
 ${B}INFO${N}
   ports                    Show port map
@@ -564,6 +1050,11 @@ ${B}EXAMPLES${N}
   devvm obs logs grafana           Tail Grafana logs
   devvm open grafana               Open Grafana in browser
   devvm run node --version         Run command in VM
+  devvm creds                      View all credentials
+  devvm creds set mysql --pass X   Update MySQL password
+  devvm app add blog --path ~/blog --type laravel
+  devvm app list                   List hosted apps
+  devvm app create api -t fastapi  Scaffold and host new app
 EOF
 }
 
@@ -590,6 +1081,8 @@ main() {
     obs)                  cmd_obs "$@" ;;
     debug)                cmd_debug "$@" ;;
     db)                   cmd_db "$@" ;;
+    creds)                cmd_creds "$@" ;;
+    app)                  cmd_app "$@" ;;
     ports)                cmd_ports "$@" ;;
     verify)               cmd_verify "$@" ;;
     version|--version|-v) cmd_version ;;

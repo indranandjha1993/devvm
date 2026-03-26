@@ -21,6 +21,8 @@ _devvm() {
     'obs:Manage observability stack'
     'debug:Start remote debugger'
     'db:Connect to database'
+    'creds:Manage database credentials'
+    'app:Manage hosted applications'
     'ports:Show port map'
     'verify:Run health check'
     'version:Show version'
@@ -51,6 +53,12 @@ _devvm() {
           ;;
         service|svc)
           _values 'action' start stop restart status logs
+          ;;
+        creds)
+          _values 'action' list show set reset
+          ;;
+        app)
+          _values 'action' add remove list start stop restart logs create
           ;;
       esac
       ;;

@@ -29,23 +29,25 @@ scrape_configs:
       - targets: ["cadvisor:8080"]
     scrape_interval: 10s
 
-  # ─── Example application scrape jobs ──────────────────────────────────────────
-  # Uncomment and adjust as needed for your applications.
+  # Demo apps (pre-installed)
+  - job_name: "nodejs-app"
+    static_configs:
+      - targets: ["host.docker.internal:3001"]
+    scrape_interval: 10s
 
-  # - job_name: "nodejs-app"
-  #   static_configs:
-  #     - targets: ["host.docker.internal:3001"]
-  #   metrics_path: /metrics
-  #   scrape_interval: 30s
+  - job_name: "python-app"
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+    scrape_interval: 10s
 
-  # - job_name: "python-app"
-  #   static_configs:
-  #     - targets: ["host.docker.internal:8000"]
-  #   metrics_path: /metrics
-  #   scrape_interval: 30s
+  - job_name: "php-app"
+    static_configs:
+      - targets: ["host.docker.internal:9253"]
+    scrape_interval: 10s
 
-  # - job_name: "php-fpm"
-  #   static_configs:
-  #     - targets: ["host.docker.internal:9253"]
-  #   metrics_path: /metrics
-  #   scrape_interval: 30s
+  # Dynamic apps registered via `devvm app add`
+  - job_name: "devvm-apps"
+    file_sd_configs:
+      - files:
+          - /opt/dev-vm/config/prometheus-apps.json
+        refresh_interval: 30s
