@@ -54,10 +54,11 @@ PYEOF
 
 echo "Python: $(python3 --version)"
 
-# --- PHP (already from apt, install Composer + Laravel) ---
-echo "--- Installing Composer & Laravel ---"
+# --- PHP (already from apt, install Composer) ---
+echo "--- Installing Composer ---"
 if ! command -v composer &>/dev/null; then
-    curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    echo "  Downloading Composer..."
+    curl -sS --retry 3 https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 fi
 cat > /etc/profile.d/composer.sh << 'COMPEOF'
 export PATH="$HOME/.config/composer/vendor/bin:$HOME/.composer/vendor/bin:$PATH"
@@ -71,7 +72,8 @@ echo "--- Installing Go ---"
 GO_VERSION="1.22.5"
 ARCH="$(dpkg --print-architecture)"
 if [ ! -d /usr/local/go ]; then
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -C /usr/local -xz
+    echo "  Downloading go${GO_VERSION} (~70MB)..."
+    curl -fSL --retry 3 "https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz" | tar -C /usr/local -xz
 fi
 
 cat > /etc/profile.d/go.sh << 'GOEOF'
@@ -91,6 +93,7 @@ echo "Go: $(go version)"
 echo "--- Installing Rust ---"
 sudo -u "$DEFAULT_USER" bash -c '
     if ! command -v rustc &>/dev/null; then
+        echo "  Downloading Rust (~100MB)..."
         curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
     fi
 ' || true
