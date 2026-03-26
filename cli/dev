@@ -187,11 +187,26 @@ _provision() {
   vm_sudo chown -R root:root "$VM_TARGET"
   vm_sudo find "$VM_TARGET" -name "*.sh" -exec chmod +x {} \;
 
-  info "Installing stacks..."
-  vm_sudo script -qfc "bash $VM_TARGET/provision/post-init.sh" /dev/null
+  info "[1/6] Installing languages..."
+  vm_sudo bash "$VM_TARGET/provision/install-languages.sh"
+
+  info "[2/6] Configuring databases..."
+  vm_sudo bash "$VM_TARGET/provision/install-databases.sh"
+
+  info "[3/6] Configuring debugging..."
+  vm_sudo bash "$VM_TARGET/provision/configure-debugging.sh"
+
+  info "[4/6] Installing tools..."
+  vm_sudo bash "$VM_TARGET/provision/install-tools.sh"
+
+  info "[5/6] Setting up config..."
+  vm_sudo bash "$VM_TARGET/provision/setup-config.sh"
+
+  info "[6/6] Installing Nginx..."
+  vm_sudo bash "$VM_TARGET/provision/install-nginx.sh"
 
   info "Installing exporters..."
-  vm_sudo script -qfc "bash $VM_TARGET/provision/install-exporters.sh" /dev/null 2>/dev/null || warn "Exporters install had issues (may need retry)"
+  vm_sudo bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
 
   info "Enabling services..."
   vm_sudo bash -c 'cp '"$VM_TARGET"'/systemd/*.service /etc/systemd/system/ 2>/dev/null; systemctl daemon-reload' || true
