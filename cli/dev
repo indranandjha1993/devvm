@@ -188,10 +188,10 @@ _provision() {
   vm_sudo find "$VM_TARGET" -name "*.sh" -exec chmod +x {} \;
 
   info "Installing stacks..."
-  vm_sudo bash "$VM_TARGET/provision/post-init.sh"
+  vm_sudo stdbuf -oL bash "$VM_TARGET/provision/post-init.sh"
 
   info "Installing exporters..."
-  vm_sudo bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
+  vm_sudo stdbuf -oL bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
 
   info "Enabling services..."
   vm_sudo bash -c 'cp '"$VM_TARGET"'/systemd/*.service /etc/systemd/system/ 2>/dev/null; systemctl daemon-reload' || true
