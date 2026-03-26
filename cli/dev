@@ -208,6 +208,9 @@ _provision() {
   info "Installing exporters..."
   vm_sudo bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
 
+  # Add user to docker group
+  vm_sudo usermod -aG docker "$(vm whoami 2>/dev/null || echo indranandjha)" 2>/dev/null || true
+
   info "Enabling services..."
   vm_sudo bash -c 'cp '"$VM_TARGET"'/systemd/*.service /etc/systemd/system/ 2>/dev/null; systemctl daemon-reload' || true
   for svc in node-exporter adminer mysqld-exporter postgres-exporter redis-exporter; do
@@ -426,7 +429,7 @@ cmd_status() {
   echo -e "${B}Observability${N}"
   for ctr in grafana prometheus loki tempo promtail cadvisor; do
     local st
-    st=$(vm docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null) || st="not found"
+    st=$(vm_sudo docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null) || st="not found"
     dot "$st" "$ctr"
   done
 
