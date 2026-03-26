@@ -30,15 +30,13 @@ Your app is live at `http://myapi.dev.local` with Nginx, systemd, and Grafana me
 
 ## What's Included
 
-**Languages**: Node.js 22 (pnpm, TypeScript) / Python 3.13 (Poetry, uv) / PHP 8.4 (Composer, Xdebug) / Go 1.22 / Rust / Java 21
-
-**Databases**: MySQL :3306 / PostgreSQL :5432 / Redis :6379 / Adminer :8080
-
-**Monitoring**: Grafana :3000 / Prometheus :9090 / Loki :3100 / Tempo :3200 — 9 dashboards
-
-**Hosting**: Nginx reverse proxy — each app gets `appname.dev.local`
-
----
+| Category | What you get |
+|----------|-------------|
+| [**Languages**](docs/languages.md) | Node.js 22, Python 3.13, PHP 8.4, Go 1.22, Rust, Java 21 |
+| [**Databases**](docs/databases.md) | MySQL :3306, PostgreSQL :5432, Redis :6379, Adminer :8080 |
+| [**Observability**](docs/observability.md) | Grafana :3000, Prometheus :9090, Loki :3100, Tempo :3200 — 9 dashboards |
+| [**App Hosting**](docs/apps.md) | Nginx reverse proxy — each app gets `appname.dev.local` |
+| [**Debugging**](docs/debugging.md) | Remote debuggers for all languages with VS Code configs |
 
 ## Install
 
@@ -66,165 +64,67 @@ Requires [OrbStack](https://orbstack.dev) (free for personal use): `brew install
 
 ---
 
-## CLI Reference
+## CLI
 
-### Lifecycle
-
-```bash
-devvm init               # Create VM and install everything
-devvm start              # Start the VM
-devvm stop               # Stop the VM
-devvm restart            # Restart the VM
-devvm reset              # Destroy and rebuild from scratch
-devvm destroy            # Delete VM permanently
-```
-
-### Control Individual Stacks
-
-Every lifecycle command accepts an optional target:
+Full reference: [docs/cli.md](docs/cli.md)
 
 ```bash
-devvm stop mysql         # Stop just MySQL
-devvm start mysql        # Start it back
-devvm restart redis      # Restart Redis
-devvm restart grafana    # Restart Grafana container
-devvm restart obs        # Restart all observability
-devvm logs mysql         # Tail MySQL logs
-devvm logs grafana       # Tail Grafana logs
-devvm logs promtail      # Tail Promtail logs
-devvm reset postgres     # Reset PostgreSQL to defaults (dev/dev)
-```
+# Lifecycle
+devvm init                     # Create VM and install everything
+devvm start [stack]            # Start VM or a specific stack
+devvm stop [stack]             # Stop VM or a specific stack
+devvm restart [stack]          # Restart VM or a specific stack
+devvm reset [stack]            # Rebuild VM or reset a stack
+devvm destroy                  # Delete VM permanently
 
-**Available targets**: `mysql`, `postgres`, `redis`, `nginx`, `grafana`, `prometheus`, `loki`, `tempo`, `promtail`, `cadvisor`, `obs` (all observability), or any registered app name.
+# Logs
+devvm logs mysql               # Tail any stack's logs
+devvm logs grafana
 
-### Applications
-
-```bash
-# Register an existing project
-devvm app add mysite --path ~/projects/mysite --type laravel
-devvm app add api --path ~/projects/api --type fastapi --port 8005
-
-# Scaffold a new project
-devvm app create blog --template express
-devvm app create site --template static
-
-# Manage
+# Apps
+devvm app add mysite --path ~/mysite --type laravel
+devvm app create api --template fastapi
 devvm app list
 devvm app remove mysite
+
+# Databases
+devvm db mysql                 # Connect to MySQL
+devvm db psql                  # Connect to PostgreSQL
+devvm db redis                 # Connect to Redis
+
+# Credentials
+devvm creds                    # View all (masked)
+devvm creds show mysql         # Full details
+devvm creds set mysql --pass X # Change password
+devvm creds reset mysql        # Reset to defaults
+
+# Debug
+devvm debug python app.py      # Start remote debugger
+devvm debug node server.js
+
+# Access
+devvm ssh                      # Shell into VM
+devvm run node --version       # Run as user
+devvm exec systemctl status    # Run as root
+devvm open grafana             # Open web UI
+devvm status                   # Show everything
+devvm verify                   # Health check
 ```
 
-Once registered, control apps like any other stack:
-
-```bash
-devvm start mysite
-devvm stop mysite
-devvm restart mysite
-devvm logs mysite
-```
-
-**Supported types:**
-
-| Type | How it runs |
-|------|------------|
-| `laravel` | `php artisan serve` |
-| `wordpress` | PHP built-in server |
-| `django` | `manage.py runserver` |
-| `flask` | `flask run` |
-| `fastapi` | `uvicorn` |
-| `express` | `node app.js` |
-| `nextjs` | `npx next dev` |
-| `spring-boot` | `java -jar` |
-| `go` | `go run .` |
-| `static` | Nginx serves files directly |
-| `custom` | Your command via `--cmd` |
-
-**Scaffold templates**: `laravel`, `django`, `flask`, `fastapi`, `express`, `nextjs`, `go-web`, `static`, `wordpress`
-
-### Credentials
-
-```bash
-devvm creds                              # List all (passwords masked)
-devvm creds show mysql                   # Show full credentials
-devvm creds set mysql --pass newpass     # Change password
-devvm creds set postgres --user admin --pass secret --db mydb
-devvm creds reset mysql                  # Reset to defaults
-```
-
-**Defaults:**
-
-| Service | User | Password | Port |
-|---------|------|----------|------|
-| MySQL | `dev` | `dev` | 3306 |
-| PostgreSQL | `dev` | `dev` | 5432 |
-| Redis | — | (none) | 6379 |
-| Grafana | `admin` | `admin` | 3000 |
-
-### Databases
-
-```bash
-devvm db mysql          # MySQL shell
-devvm db psql           # PostgreSQL shell
-devvm db redis          # Redis CLI
-```
-
-Connect from any Mac client at `dev.orb.local:PORT` with the credentials above.
-
-### Debugging
-
-```bash
-devvm debug python app.py    # debugpy on :5678
-devvm debug node server.js   # Node inspector on :9229
-devvm debug php              # Xdebug instructions
-devvm debug go ./cmd/app     # Delve on :2345 (install first: devvm exec go install github.com/go-delve/delve/cmd/dlv@latest)
-devvm debug java App.jar     # JDWP on :5005
-```
-
-Pre-built VS Code configs in `vscode/launch.json`. Path mappings work automatically — OrbStack mounts your Mac home at the same path in the VM.
-
-### Install on Demand
-
-These tools are not pre-installed to keep provisioning fast. Install when needed:
-
-```bash
-devvm exec composer global require laravel/installer   # Laravel CLI
-devvm exec go install golang.org/x/tools/gopls@latest  # Go language server
-devvm exec go install github.com/go-delve/delve/cmd/dlv@latest  # Go debugger
-devvm exec rustup component add rust-analyzer          # Rust language server
-devvm exec pip3 install mitmproxy                      # HTTP proxy
-```
-
-### Monitoring
-
-```bash
-devvm open grafana     # http://dev.orb.local:3000
-devvm open adminer     # http://dev.orb.local:8080
-devvm open prometheus  # http://dev.orb.local:9090
-```
-
-**9 dashboards**: System Metrics, Services, MySQL, PostgreSQL, Redis, Node.js, Python, PHP, Logs Explorer.
-
-**Add your app's metrics**: expose `/metrics` with [prom-client](https://www.npmjs.com/package/prom-client) (Node), [prometheus_client](https://pypi.org/project/prometheus_client/) (Python), or any Prometheus library.
-
-**Search logs** in Grafana Explore with Loki:
-```
-{job="syslog"} |= "error"
-{job="mysql"}
-rate({job="syslog"}[5m])
-```
-
-### Access
-
-```bash
-devvm ssh                     # Shell into VM
-devvm ssh ls /opt             # Run one command
-devvm run node --version      # Run as user
-devvm exec systemctl status   # Run as root
-devvm status                  # Show everything
-devvm ports                   # Port map
-devvm verify                  # Health check
-```
+**Stacks**: `mysql`, `postgres`, `redis`, `nginx`, `grafana`, `prometheus`, `loki`, `tempo`, `promtail`, `cadvisor`, `obs`, or any app name.
 
 ---
+
+## Documentation
+
+| Guide | What it covers |
+|-------|---------------|
+| [Languages](docs/languages.md) | Node.js, Python, PHP, Go, Rust, Java — versions, tools, usage |
+| [Databases](docs/databases.md) | MySQL, PostgreSQL, Redis — connect, manage, credentials |
+| [Observability](docs/observability.md) | Grafana, Prometheus, Loki, Tempo — dashboards, metrics, logs, traces |
+| [App Hosting](docs/apps.md) | Register, scaffold, and manage apps with Nginx |
+| [Debugging](docs/debugging.md) | Remote debuggers for all languages with VS Code |
+| [CLI Reference](docs/cli.md) | All commands |
 
 ## Troubleshooting
 
