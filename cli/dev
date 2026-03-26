@@ -1088,51 +1088,66 @@ ${B}devvm${N} v${VERSION} — Developer VM manager for OrbStack
 ${B}USAGE${N}
   devvm <command> [target]
 
-${B}LIFECYCLE${N}
-  init                     Create VM and install everything
-  start [stack]            Start VM, or start a specific stack
-  stop [stack]             Stop VM, or stop a specific stack
-  restart [stack]          Restart VM, or restart a specific stack
-  reset [stack]            Rebuild VM, or reset a specific stack to defaults
+${B}MACHINE${N}
+  init                     Create VM and install everything (~5 min)
   destroy                  Delete VM permanently
 
-${B}STACKS${N}
-  Targets: mysql, postgres, redis, nginx, grafana, prometheus, loki,
-           tempo, promtail, cadvisor, obs (all observability), <app-name>
+${B}CONTROL${N}  ${D}— no target = whole VM, with target = just that stack${N}
+  start [target]           Start VM or a stack
+  stop [target]            Stop VM or a stack
+  restart [target]         Restart VM or a stack
+  reset [target]           Rebuild VM or reset a stack to defaults
+  logs <target>            Tail logs for a stack or app
+
+  ${D}Targets: mysql, postgres, redis, nginx, grafana, prometheus,
+  loki, tempo, cadvisor, obs, or any app name${N}
 
 ${B}APPS${N}
-  app add <name> --path <dir> --type <type> [--port N]
-  app create <name> --template <type>
-  app list
-  app remove <name>
+  app add <name>           Register app  (--path, --type, [--port])
+  app create <name>        Scaffold app  (--template)
+  app list                 List all apps with status
+  app remove <name>        Unregister and clean up
 
-${B}DEVELOP${N}
-  db <mysql|psql|redis>    Connect to database
-  debug <lang> [file]      Start remote debugger (python|node|php|go|java)
-  creds [show|set|reset]   View and manage credentials
-  logs <stack|app>         Tail logs for any stack or app
+${B}DATA${N}
+  db <mysql|psql|redis>    Connect to database shell
+  creds                    List credentials (masked)
+  creds show <service>     Show full credentials
+  creds set <service>      Update credentials (--user, --pass, --db)
+  creds reset <service>    Reset to defaults
 
-${B}ACCESS${N}
-  ssh [command]            Shell into VM or run a command
+${B}DEBUG${N}
+  debug python <file>      debugpy on :5678
+  debug node <file>        Node inspector on :9229
+  debug php                Xdebug setup (trigger mode, :9003)
+  debug go [pkg]           Delve on :2345
+  debug java <class|jar>   JDWP on :5005
+
+${B}VM ACCESS${N}
+  ssh [command]            Shell into VM, or run one command
   run <cmd>                Run command as user
   exec <cmd>               Run command as root
   open <ui>                Open web UI (grafana|adminer|prometheus)
-  status                   Show everything
-  ports                    Show port map
-  verify                   Run health check
+
+${B}INFO${N}
+  status                   Show languages, databases, observability, apps
+  ports                    Port map
+  verify                   Health check (40 checks)
+  version                  Show version
+  help                     This help
 
 ${B}EXAMPLES${N}
-  devvm init                           Set up everything from scratch
-  devvm start                          Start the VM
-  devvm stop mysql                     Stop just MySQL
-  devvm restart redis                  Restart Redis
-  devvm logs grafana                   Tail Grafana logs
-  devvm reset postgres                 Reset PostgreSQL to defaults
+  devvm init                            Create and provision
+  devvm stop mysql                      Stop just MySQL
+  devvm restart grafana                 Restart Grafana
+  devvm logs redis                      Tail Redis logs
+  devvm reset postgres                  Reset to dev/dev
   devvm app add blog --path ~/blog --type laravel
-  devvm app create api -t fastapi      Scaffold + host new app
-  devvm creds set mysql --pass secret  Change MySQL password
-  devvm db mysql                       Open MySQL shell
-  devvm debug python app.py            Debug Python script
+  devvm app create api -t fastapi       Scaffold + host
+  devvm creds set mysql --pass secret   Change password
+  devvm db psql                         PostgreSQL shell
+  devvm debug python app.py             Start debugger
+
+  ${D}Docs: https://github.com/indranandjha/dev-vm/tree/main/docs${N}
 EOF
 }
 
