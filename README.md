@@ -5,7 +5,7 @@ Your entire dev infrastructure in one command. An Ubuntu VM on [OrbStack](https:
 ## Quick Start
 
 ```bash
-brew tap indranandjha/tap && brew install devvm   # or: git clone + sudo make install
+brew tap indranandjha1993/tap && brew install devvm   # or: git clone + sudo make install
 
 devvm init       # creates VM, installs everything (~5 min)
 devvm status     # see what's running
@@ -42,20 +42,20 @@ Your app is live at `http://myapi.dev.local` with Nginx, systemd, and Grafana me
 
 **Homebrew**
 ```bash
-brew tap indranandjha/tap
+brew tap indranandjha1993/tap
 brew install devvm
 ```
 
 **From source**
 ```bash
-git clone https://github.com/indranandjha/dev-vm.git
+git clone https://github.com/indranandjha1993/devvm.git
 cd dev-vm
 sudo make install
 ```
 
 **Development**
 ```bash
-git clone https://github.com/indranandjha/dev-vm.git
+git clone https://github.com/indranandjha1993/devvm.git
 cd dev-vm
 sudo make link
 ```

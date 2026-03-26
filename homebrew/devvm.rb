@@ -1,10 +1,10 @@
 class Devvm < Formula
   desc "Developer VM manager - multi-stack dev environment with observability"
-  homepage "https://github.com/indranandjha/dev-vm"
-  url "https://github.com/indranandjha/dev-vm/archive/refs/tags/v1.0.0.tar.gz"
+  homepage "https://github.com/indranandjha1993/devvm"
+  url "https://github.com/indranandjha1993/devvm/archive/refs/tags/v2.1.0.tar.gz"
   sha256 "" # Will be filled after release
   license "MIT"
-  version "1.0.0"
+  version "2.1.0"
 
   depends_on "orbstack" => :optional
 

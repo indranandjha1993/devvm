@@ -1,6 +1,6 @@
 #!/bin/bash
 # devvm - Developer VM manager for OrbStack
-# https://github.com/indranandjha/dev-vm
+# https://github.com/indranandjha1993/devvm
 set -euo pipefail
 
 readonly VERSION="2.1.0"
@@ -1147,7 +1147,7 @@ ${B}EXAMPLES${N}
   devvm db psql                         PostgreSQL shell
   devvm debug python app.py             Start debugger
 
-  ${D}Docs: https://github.com/indranandjha/dev-vm/tree/main/docs${N}
+  ${D}Docs: https://github.com/indranandjha1993/devvm/tree/main/docs${N}
 EOF
 }
 
