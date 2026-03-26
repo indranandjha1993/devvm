@@ -5,29 +5,28 @@ Your entire dev infrastructure in one command. An Ubuntu VM on [OrbStack](https:
 ## Quick Start
 
 ```bash
-brew tap indranandjha/tap && brew install devvm  # or: git clone + make install
+brew tap indranandjha/tap && brew install devvm   # or: git clone + sudo make install
 
-devvm init          # create the VM
-devvm provision     # install everything (~5 min first time)
-devvm status        # see what's running
+devvm init       # creates VM, installs everything (~5 min)
+devvm status     # see what's running
 ```
 
-That's it. You now have Node.js, Python, PHP, Go, Rust, Java, MySQL, PostgreSQL, Redis, Grafana, Prometheus, and Nginx ready to use.
+Done. You now have Node.js, Python, PHP, Go, Rust, Java, MySQL, PostgreSQL, Redis, Grafana, Prometheus, and Nginx ready to go.
 
-## Host Your First App
+## Host an App
 
 ```bash
-# Option 1: Point to an existing project
+# Existing project
 devvm app add myapi --path ~/projects/myapi --type fastapi
 
-# Option 2: Scaffold a new one
+# Or scaffold a new one
 devvm app create blog --template express
 
-# See what's running
+# Check it
 devvm app list
 ```
 
-Your app is now live at `http://myapi.dev.local` with Nginx reverse proxy, systemd process management, and Grafana metrics.
+Your app is live at `http://myapi.dev.local` with Nginx, systemd, and Grafana metrics.
 
 ## What's Included
 
@@ -35,9 +34,11 @@ Your app is now live at `http://myapi.dev.local` with Nginx reverse proxy, syste
 
 **Databases**: MySQL :3306 / PostgreSQL :5432 / Redis :6379 / Adminer :8080
 
-**Monitoring**: Grafana :3000 / Prometheus :9090 / Loki :3100 / Tempo :3200 — with 9 pre-built dashboards
+**Monitoring**: Grafana :3000 / Prometheus :9090 / Loki :3100 / Tempo :3200 — 9 dashboards
 
 **Hosting**: Nginx reverse proxy — each app gets `appname.dev.local`
+
+---
 
 ## Install
 
@@ -58,27 +59,45 @@ sudo make install
 ```bash
 git clone https://github.com/indranandjha/dev-vm.git
 cd dev-vm
-sudo make link   # symlink, edits take effect immediately
+sudo make link
 ```
 
 Requires [OrbStack](https://orbstack.dev) (free for personal use): `brew install orbstack`
 
+---
+
 ## CLI Reference
 
-### Machine
+### Lifecycle
 
 ```bash
-devvm init              # Create the VM
-devvm provision         # Install all stacks + databases + monitoring
-devvm up                # Start VM + all services
-devvm down              # Stop VM
-devvm restart           # Stop + start
-devvm reboot            # Graceful in-VM reboot
-devvm destroy           # Delete VM permanently
-devvm status            # Show everything
+devvm init               # Create VM and install everything
+devvm start              # Start the VM
+devvm stop               # Stop the VM
+devvm restart            # Restart the VM
+devvm reset              # Destroy and rebuild from scratch
+devvm destroy            # Delete VM permanently
 ```
 
-### Host Applications
+### Control Individual Stacks
+
+Every lifecycle command accepts an optional target:
+
+```bash
+devvm stop mysql         # Stop just MySQL
+devvm start mysql        # Start it back
+devvm restart redis      # Restart Redis
+devvm restart grafana    # Restart Grafana container
+devvm restart obs        # Restart all observability
+devvm logs mysql         # Tail MySQL logs
+devvm logs grafana       # Tail Grafana logs
+devvm logs promtail      # Tail Promtail logs
+devvm reset postgres     # Reset PostgreSQL to defaults (dev/dev)
+```
+
+**Available targets**: `mysql`, `postgres`, `redis`, `nginx`, `grafana`, `prometheus`, `loki`, `tempo`, `promtail`, `cadvisor`, `obs` (all observability), or any registered app name.
+
+### Applications
 
 ```bash
 # Register an existing project
@@ -91,14 +110,19 @@ devvm app create site --template static
 
 # Manage
 devvm app list
-devvm app start mysite
-devvm app stop mysite
-devvm app restart mysite
-devvm app logs mysite
 devvm app remove mysite
 ```
 
-**Supported app types:**
+Once registered, control apps like any other stack:
+
+```bash
+devvm start mysite
+devvm stop mysite
+devvm restart mysite
+devvm logs mysite
+```
+
+**Supported types:**
 
 | Type | How it runs |
 |------|------------|
@@ -114,26 +138,26 @@ devvm app remove mysite
 | `static` | Nginx serves files directly |
 | `custom` | Your command via `--cmd` |
 
-**Scaffold templates** (for `devvm app create`): `laravel`, `django`, `flask`, `fastapi`, `express`, `nextjs`, `go-web`, `static`, `wordpress`
+**Scaffold templates**: `laravel`, `django`, `flask`, `fastapi`, `express`, `nextjs`, `go-web`, `static`, `wordpress`
 
 ### Credentials
 
 ```bash
 devvm creds                              # List all (passwords masked)
-devvm creds show mysql                   # Show MySQL credentials
-devvm creds set mysql --pass newpass     # Update password
+devvm creds show mysql                   # Show full credentials
+devvm creds set mysql --pass newpass     # Change password
 devvm creds set postgres --user admin --pass secret --db mydb
 devvm creds reset mysql                  # Reset to defaults
 ```
 
-Default credentials:
+**Defaults:**
 
-| Service | User | Password | Database |
-|---------|------|----------|----------|
-| MySQL | `dev` | `dev` | `devdb` |
-| PostgreSQL | `dev` | `dev` | `devdb` |
-| Redis | — | (none) | — |
-| Grafana | `admin` | `admin` | — |
+| Service | User | Password | Port |
+|---------|------|----------|------|
+| MySQL | `dev` | `dev` | 3306 |
+| PostgreSQL | `dev` | `dev` | 5432 |
+| Redis | — | (none) | 6379 |
+| Grafana | `admin` | `admin` | 3000 |
 
 ### Databases
 
@@ -155,57 +179,50 @@ devvm debug go ./cmd/app     # Delve on :2345
 devvm debug java App.jar     # JDWP on :5005
 ```
 
-Pre-built VS Code launch configs in `vscode/launch.json`. Path mappings work automatically — OrbStack mounts your Mac home at the same path in the VM.
+Pre-built VS Code configs in `vscode/launch.json`. Path mappings work automatically — OrbStack mounts your Mac home at the same path in the VM.
 
 ### Monitoring
 
-Open Grafana: `devvm open grafana` or visit http://dev.orb.local:3000
+```bash
+devvm open grafana     # http://dev.orb.local:3000
+devvm open adminer     # http://dev.orb.local:8080
+devvm open prometheus  # http://dev.orb.local:9090
+```
 
-**9 dashboards** with live data:
-- System Metrics, Services & Containers
-- MySQL, PostgreSQL, Redis
-- Node.js, Python, PHP application metrics
-- Logs Explorer (Loki)
+**9 dashboards**: System Metrics, Services, MySQL, PostgreSQL, Redis, Node.js, Python, PHP, Logs Explorer.
 
-**Add your app's metrics**: expose a `/metrics` endpoint with [prom-client](https://www.npmjs.com/package/prom-client) (Node), [prometheus_client](https://pypi.org/project/prometheus_client/) (Python), or any Prometheus library.
+**Add your app's metrics**: expose `/metrics` with [prom-client](https://www.npmjs.com/package/prom-client) (Node), [prometheus_client](https://pypi.org/project/prometheus_client/) (Python), or any Prometheus library.
 
-**Search logs**: In Grafana Explore, select Loki and query:
+**Search logs** in Grafana Explore with Loki:
 ```
 {job="syslog"} |= "error"
 {job="mysql"}
 rate({job="syslog"}[5m])
 ```
 
-### Services & Observability
-
-```bash
-devvm service restart mysql          # Manage any systemd service
-devvm service logs demo-node         # Tail service logs
-devvm obs up                         # Start Grafana + Prometheus + Loki + Tempo
-devvm obs logs grafana               # Tail container logs
-devvm obs restart prometheus         # Restart one container
-```
-
 ### Access
 
 ```bash
-devvm ssh                   # Shell into VM
-devvm run node --version    # Run command as user
-devvm exec systemctl status # Run command as root
-devvm open grafana          # Open web UIs
-devvm ports                 # Show all ports
-devvm verify                # Run health check
+devvm ssh                     # Shell into VM
+devvm ssh ls /opt             # Run one command
+devvm run node --version      # Run as user
+devvm exec systemctl status   # Run as root
+devvm status                  # Show everything
+devvm ports                   # Port map
+devvm verify                  # Health check
 ```
+
+---
 
 ## Troubleshooting
 
 ```bash
-devvm verify                          # Check all 39 components
-devvm service status mysql            # Check specific service
-devvm service logs mysql              # Check service logs
-devvm obs logs tempo                  # Check container logs
-devvm provision                       # Re-run (idempotent, safe)
-orb doctor                            # Check OrbStack health
+devvm verify                 # Check all components
+devvm logs mysql             # Check service logs
+devvm logs grafana           # Check container logs
+devvm restart mysql          # Restart a stack
+devvm reset                  # Full rebuild (last resort)
+orb doctor                   # Check OrbStack health
 ```
 
 ## License
