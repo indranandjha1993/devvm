@@ -29,23 +29,7 @@ scrape_configs:
       - targets: ["cadvisor:8080"]
     scrape_interval: 10s
 
-  # Demo apps (pre-installed)
-  - job_name: "nodejs-app"
-    static_configs:
-      - targets: ["host.docker.internal:3001"]
-    scrape_interval: 10s
-
-  - job_name: "python-app"
-    static_configs:
-      - targets: ["host.docker.internal:8000"]
-    scrape_interval: 10s
-
-  - job_name: "php-app"
-    static_configs:
-      - targets: ["host.docker.internal:9253"]
-    scrape_interval: 10s
-
-  # Dynamic apps registered via `devvm app add`
+  # Apps registered via `devvm app add` (auto-discovered)
   - job_name: "devvm-apps"
     file_sd_configs:
       - files:

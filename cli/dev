@@ -297,12 +297,6 @@ cmd_status() {
     dot "$st" "$ctr"
   done
 
-  echo ""
-  echo -e "${B}Demo Apps${N}"
-  for svc in demo-node demo-python demo-php; do
-    dot "$(svc_status "$svc")" "$svc"
-  done
-
   # Show registered apps
   local apps_json
   apps_json=$(_apps_read 2>/dev/null) || apps_json='{"apps":{}}'

@@ -14,7 +14,7 @@ install:
 	@install -d $(BINDIR)
 	@install -m 755 cli/dev $(BINDIR)/devvm
 	@install -d $(SHAREDIR)
-	@cp -R cloud-init provision observability systemd vscode demo-apps $(SHAREDIR)/
+	@cp -R cloud-init provision observability systemd vscode $(SHAREDIR)/
 	@cp verify.sh setup.sh $(SHAREDIR)/
 	@install -d $(COMPDIR_BASH) $(COMPDIR_ZSH)
 	@install -m 644 completions/devvm.bash $(COMPDIR_BASH)/devvm
