@@ -171,17 +171,16 @@ _provision() {
 
   for dir in provision observability systemd; do
     [[ -d "$project_root/$dir" ]] || continue
-    vm_sudo mkdir -p "$VM_TARGET/$dir"
-    vm_sudo chmod 777 "$VM_TARGET/$dir"
-    for f in "$project_root/$dir"/*; do
-      [[ -f "$f" ]] && vm_sudo bash -c "cat > $VM_TARGET/$dir/$(basename "$f")" < "$f"
-    done
-    find "$project_root/$dir" -mindepth 2 -type f 2>/dev/null | while read -r f; do
+
+    # Push all files (including nested subdirectories)
+    # Uses fd 3 for the file list to avoid conflicts with stdin redirection
+    while IFS= read -r f <&3; do
       local rel="${f#$project_root/$dir/}"
-      local rdir="$(dirname "$rel")"
+      local rdir
+      rdir="$(dirname "$rel")"
       vm_sudo mkdir -p "$VM_TARGET/$dir/$rdir"
       vm_sudo bash -c "cat > $VM_TARGET/$dir/$rel" < "$f"
-    done
+    done 3< <(find "$project_root/$dir" -type f 2>/dev/null)
   done
   [[ -f "$project_root/verify.sh" ]] && vm_sudo bash -c "cat > $VM_TARGET/verify.sh" < "$project_root/verify.sh"
 

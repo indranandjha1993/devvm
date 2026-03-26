@@ -104,6 +104,7 @@ check_service "mysql"
 check_service "postgresql"
 check_service "redis-server"
 check_service "docker"
+check_service "nginx"
 
 echo ""
 echo -e "${BOLD}Database Ports:${NC}"

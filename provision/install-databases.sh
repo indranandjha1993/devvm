@@ -66,7 +66,7 @@ echo "Redis: configured (port 6379, no auth)"
 echo "--- Installing Adminer ---"
 mkdir -p /opt/adminer
 if [ ! -f /opt/adminer/index.php ]; then
-    curl -fsSL -o /opt/adminer/index.php \
+    curl -fsSL --retry 3 -o /opt/adminer/index.php \
         "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php"
 fi
 

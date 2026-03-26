@@ -1,7 +1,7 @@
 #cloud-config
 
 package_update: true
-package_upgrade: true
+package_upgrade: false
 
 apt:
   sources:
@@ -10,7 +10,7 @@ apt:
       keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
 
 packages:
-  # Base tools
+  # Essentials only — everything else is installed by provision scripts
   - build-essential
   - git
   - curl
@@ -23,9 +23,7 @@ packages:
   - vim
   - ca-certificates
   - gnupg
-  - lsb-release
   - software-properties-common
-  - apt-transport-https
   # Docker
   - docker-ce
   - docker-ce-cli
@@ -34,9 +32,8 @@ packages:
   # Databases
   - mysql-server
   - postgresql
-  - postgresql-contrib
   - redis-server
-  # PHP (use default Ubuntu packages - Questing ships PHP 8.4)
+  # PHP
   - php
   - php-fpm
   - php-cli
@@ -60,10 +57,9 @@ packages:
   - python3-full
   # Java
   - openjdk-21-jdk
-  # Network tools
+  # Network
   - httpie
   - net-tools
-  - dnsutils
 
 groups:
   - docker
@@ -78,4 +74,3 @@ runcmd:
   - systemctl enable mysql
   - systemctl enable postgresql
   - systemctl enable redis-server
-  - echo "Cloud-init provisioning complete" > /tmp/cloud-init-done

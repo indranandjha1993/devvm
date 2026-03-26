@@ -30,7 +30,7 @@ Your app is live at `http://myapi.dev.local` with Nginx, systemd, and Grafana me
 
 ## What's Included
 
-**Languages**: Node.js 22 (pnpm, TypeScript) / Python 3.13 (Poetry, uv) / PHP 8.4 (Composer, Laravel, Xdebug) / Go 1.22 (Delve) / Rust (rust-analyzer) / Java 21
+**Languages**: Node.js 22 (pnpm, TypeScript) / Python 3.13 (Poetry, uv) / PHP 8.4 (Composer, Xdebug) / Go 1.22 / Rust / Java 21
 
 **Databases**: MySQL :3306 / PostgreSQL :5432 / Redis :6379 / Adminer :8080
 
@@ -175,11 +175,23 @@ Connect from any Mac client at `dev.orb.local:PORT` with the credentials above.
 devvm debug python app.py    # debugpy on :5678
 devvm debug node server.js   # Node inspector on :9229
 devvm debug php              # Xdebug instructions
-devvm debug go ./cmd/app     # Delve on :2345
+devvm debug go ./cmd/app     # Delve on :2345 (install first: devvm exec go install github.com/go-delve/delve/cmd/dlv@latest)
 devvm debug java App.jar     # JDWP on :5005
 ```
 
 Pre-built VS Code configs in `vscode/launch.json`. Path mappings work automatically — OrbStack mounts your Mac home at the same path in the VM.
+
+### Install on Demand
+
+These tools are not pre-installed to keep provisioning fast. Install when needed:
+
+```bash
+devvm exec composer global require laravel/installer   # Laravel CLI
+devvm exec go install golang.org/x/tools/gopls@latest  # Go language server
+devvm exec go install github.com/go-delve/delve/cmd/dlv@latest  # Go debugger
+devvm exec rustup component add rust-analyzer          # Rust language server
+devvm exec pip3 install mitmproxy                      # HTTP proxy
+```
 
 ### Monitoring
 

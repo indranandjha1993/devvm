@@ -59,8 +59,6 @@ echo "--- Installing Composer & Laravel ---"
 if ! command -v composer &>/dev/null; then
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 fi
-sudo -u "$DEFAULT_USER" composer global require laravel/installer 2>/dev/null || true
-
 cat > /etc/profile.d/composer.sh << 'COMPEOF'
 export PATH="$HOME/.config/composer/vendor/bin:$HOME/.composer/vendor/bin:$PATH"
 COMPEOF
@@ -84,17 +82,8 @@ GOEOF
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 export GOPATH="/root/go"
 
-# Install Go tools
-go install golang.org/x/tools/gopls@latest 2>/dev/null || true
-go install github.com/go-delve/delve/cmd/dlv@latest 2>/dev/null || true
-
-# Install for default user too
-sudo -u "$DEFAULT_USER" bash -c '
-    export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
-    export GOPATH="$HOME/go"
-    go install golang.org/x/tools/gopls@latest 2>/dev/null || true
-    go install github.com/go-delve/delve/cmd/dlv@latest 2>/dev/null || true
-' || true
+# Go tools installed on first use: go install golang.org/x/tools/gopls@latest
+# go install github.com/go-delve/delve/cmd/dlv@latest
 
 echo "Go: $(go version)"
 
@@ -102,10 +91,8 @@ echo "Go: $(go version)"
 echo "--- Installing Rust ---"
 sudo -u "$DEFAULT_USER" bash -c '
     if ! command -v rustc &>/dev/null; then
-        curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+        curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
     fi
-    source "$HOME/.cargo/env"
-    rustup component add rust-analyzer 2>/dev/null || true
 ' || true
 
 cat > /etc/profile.d/rust.sh << 'RUSTEOF'

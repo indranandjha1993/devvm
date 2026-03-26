@@ -9,7 +9,7 @@ MYSQLD_EXPORTER_VERSION="0.15.1"
 echo "--- Installing mysqld_exporter ${MYSQLD_EXPORTER_VERSION} ---"
 
 cd /tmp
-curl -fsSL "https://github.com/prometheus/mysqld_exporter/releases/download/v${MYSQLD_EXPORTER_VERSION}/mysqld_exporter-${MYSQLD_EXPORTER_VERSION}.linux-arm64.tar.gz" -o mysqld_exporter.tar.gz
+curl -fsSL --retry 3 "https://github.com/prometheus/mysqld_exporter/releases/download/v${MYSQLD_EXPORTER_VERSION}/mysqld_exporter-${MYSQLD_EXPORTER_VERSION}.linux-arm64.tar.gz" -o mysqld_exporter.tar.gz
 tar xzf mysqld_exporter.tar.gz
 sudo cp "mysqld_exporter-${MYSQLD_EXPORTER_VERSION}.linux-arm64/mysqld_exporter" /usr/local/bin/
 sudo chmod +x /usr/local/bin/mysqld_exporter
@@ -40,7 +40,7 @@ POSTGRES_EXPORTER_VERSION="0.15.0"
 echo "--- Installing postgres_exporter ${POSTGRES_EXPORTER_VERSION} ---"
 
 cd /tmp
-curl -fsSL "https://github.com/prometheus-community/postgres_exporter/releases/download/v${POSTGRES_EXPORTER_VERSION}/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-arm64.tar.gz" -o postgres_exporter.tar.gz
+curl -fsSL --retry 3 "https://github.com/prometheus-community/postgres_exporter/releases/download/v${POSTGRES_EXPORTER_VERSION}/postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-arm64.tar.gz" -o postgres_exporter.tar.gz
 tar xzf postgres_exporter.tar.gz
 sudo cp "postgres_exporter-${POSTGRES_EXPORTER_VERSION}.linux-arm64/postgres_exporter" /usr/local/bin/
 sudo chmod +x /usr/local/bin/postgres_exporter
@@ -64,7 +64,7 @@ REDIS_EXPORTER_VERSION="1.58.0"
 echo "--- Installing redis_exporter ${REDIS_EXPORTER_VERSION} ---"
 
 cd /tmp
-curl -fsSL "https://github.com/oliver006/redis_exporter/releases/download/v${REDIS_EXPORTER_VERSION}/redis_exporter-v${REDIS_EXPORTER_VERSION}.linux-arm64.tar.gz" -o redis_exporter.tar.gz
+curl -fsSL --retry 3 "https://github.com/oliver006/redis_exporter/releases/download/v${REDIS_EXPORTER_VERSION}/redis_exporter-v${REDIS_EXPORTER_VERSION}.linux-arm64.tar.gz" -o redis_exporter.tar.gz
 tar xzf redis_exporter.tar.gz
 sudo cp "redis_exporter-v${REDIS_EXPORTER_VERSION}.linux-arm64/redis_exporter" /usr/local/bin/
 sudo chmod +x /usr/local/bin/redis_exporter

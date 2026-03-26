@@ -5,18 +5,13 @@ echo "==> Installing tools..."
 
 ARCH="$(dpkg --print-architecture)"
 
-# --- mitmproxy ---
-echo "--- Installing mitmproxy ---"
-if ! command -v mitmproxy &>/dev/null; then
-    pip3 install --break-system-packages mitmproxy 2>/dev/null || pipx install mitmproxy 2>/dev/null || true
-fi
-echo "mitmproxy: $(mitmproxy --version 2>/dev/null | head -1 || echo 'installed')"
+# mitmproxy: install on demand with `devvm exec pip3 install mitmproxy`
 
 # --- dive (Docker image explorer) ---
 echo "--- Installing dive ---"
 if ! command -v dive &>/dev/null; then
     DIVE_VERSION="0.12.0"
-    curl -fsSL -o /tmp/dive.deb \
+    curl -fsSL --retry 3 -o /tmp/dive.deb \
         "https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_${ARCH}.deb" 2>/dev/null && \
     dpkg -i /tmp/dive.deb 2>/dev/null && \
     rm -f /tmp/dive.deb || echo "dive: install from GitHub failed, try 'apt install dive' manually"
@@ -29,7 +24,7 @@ if ! command -v ctop &>/dev/null; then
     CTOP_ARCH="$ARCH"
     [ "$CTOP_ARCH" = "arm64" ] && CTOP_ARCH="arm64"
     [ "$CTOP_ARCH" = "amd64" ] && CTOP_ARCH="amd64"
-    curl -fsSL -o /usr/local/bin/ctop \
+    curl -fsSL --retry 3 -o /usr/local/bin/ctop \
         "https://github.com/bcicen/ctop/releases/download/v${CTOP_VERSION}/ctop-${CTOP_VERSION}-linux-${CTOP_ARCH}" 2>/dev/null && \
     chmod +x /usr/local/bin/ctop || echo "ctop: install failed"
 fi
@@ -42,7 +37,7 @@ if ! command -v node_exporter &>/dev/null; then
     [ "$NE_ARCH" = "arm64" ] && NE_ARCH="arm64"
     [ "$NE_ARCH" = "amd64" ] && NE_ARCH="amd64"
     cd /tmp
-    curl -fsSL -o node_exporter.tar.gz \
+    curl -fsSL --retry 3 -o node_exporter.tar.gz \
         "https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-${NE_ARCH}.tar.gz"
     tar xzf node_exporter.tar.gz
     cp "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NE_ARCH}/node_exporter" /usr/local/bin/
