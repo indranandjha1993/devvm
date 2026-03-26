@@ -125,6 +125,7 @@ devvm verify                   # Health check
 | [App Hosting](docs/apps.md) | Register, scaffold, and manage apps with Nginx |
 | [Debugging](docs/debugging.md) | Remote debuggers for all languages with VS Code |
 | [CLI Reference](docs/cli.md) | All commands |
+| [Releasing](docs/releasing.md) | Push code, tag, update Homebrew |
 
 ## Troubleshooting
 
