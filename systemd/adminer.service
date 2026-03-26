@@ -1,0 +1,13 @@
+[Unit]
+Description=Adminer Database Web UI
+After=network.target mysql.service postgresql.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/php -S 0.0.0.0:8080 -t /opt/adminer
+Restart=always
+RestartSec=5
+User=www-data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,137 @@
+{
+  "uid": "php-fpm",
+  "title": "PHP Application",
+  "tags": ["php", "application"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Requests",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "php_requests_total{job=\"php-app\"}", "legendFormat": "Total", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Uptime",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "expr": "php_uptime_seconds{job=\"php-app\"}", "legendFormat": "Uptime", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Memory Usage",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }, { "color": "#FF9830", "value": 104857600 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "php_memory_usage_bytes{job=\"php-app\"}", "legendFormat": "Memory", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Peak Memory",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }, { "color": "#FF9830", "value": 104857600 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "expr": "php_memory_peak_bytes{job=\"php-app\"}", "legendFormat": "Peak", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [{ "expr": "rate(php_requests_total{job=\"php-app\"}[5m])", "legendFormat": "Requests/s", "refId": "A" }]
+    },
+    {
+      "id": 6,
+      "title": "Request Duration (p50 / p90 / p99)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        { "expr": "php_request_duration_seconds{job=\"php-app\",quantile=\"0.5\"}", "legendFormat": "p50", "refId": "A" },
+        { "expr": "php_request_duration_seconds{job=\"php-app\",quantile=\"0.9\"}", "legendFormat": "p90", "refId": "B" },
+        { "expr": "php_request_duration_seconds{job=\"php-app\",quantile=\"0.99\"}", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Requests by Route",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [{ "expr": "php_requests_by_route{job=\"php-app\"}", "legendFormat": "{{ route }}", "refId": "A" }]
+    },
+    {
+      "id": 8,
+      "title": "Memory Over Time",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        { "expr": "php_memory_usage_bytes{job=\"php-app\"}", "legendFormat": "Current", "refId": "A" },
+        { "expr": "php_memory_peak_bytes{job=\"php-app\"}", "legendFormat": "Peak", "refId": "B" }
+      ]
+    }
+  ]
+}

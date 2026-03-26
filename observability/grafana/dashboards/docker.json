@@ -1,0 +1,207 @@
+{
+  "uid": "docker",
+  "title": "Services & Containers",
+  "tags": ["services", "containers", "cadvisor"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Services",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "expr": "count(container_memory_usage_bytes{id=~\"/system.slice/.*service\"})", "legendFormat": "Services", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "Total Memory (All Services)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }, { "color": "#FF9830", "value": 2147483648 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "sum(container_memory_usage_bytes{id=~\"/system.slice/.*service\"})", "legendFormat": "Total", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Total CPU (All Services)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }, { "color": "#FF9830", "value": 0.8 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{id=~\"/system.slice/.*service\"}[5m]))", "legendFormat": "CPU", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Docker Daemon Memory",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "#73BF69", "value": null }, { "color": "#FF9830", "value": 536870912 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "expr": "container_memory_usage_bytes{id=\"/system.slice/docker.service\"}", "legendFormat": "Docker", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Service CPU Usage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "stacking": { "mode": "normal" } }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{
+        "expr": "rate(container_cpu_usage_seconds_total{id=~\"/system.slice/(docker|mysql|postgresql.*|redis-server|demo-.*|containerd)\\\\.service\"}[5m])",
+        "legendFormat": "{{ id }}",
+        "refId": "A"
+      }],
+      "transformations": [{
+        "id": "renameByRegex",
+        "options": { "regex": "/system.slice/(.*)\\.service", "renamePattern": "$1" }
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Service Memory Usage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "stacking": { "mode": "normal" } }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{
+        "expr": "container_memory_usage_bytes{id=~\"/system.slice/(docker|mysql|postgresql.*|redis-server|demo-.*|containerd)\\\\.service\"}",
+        "legendFormat": "{{ id }}",
+        "refId": "A"
+      }],
+      "transformations": [{
+        "id": "renameByRegex",
+        "options": { "regex": "/system.slice/(.*)\\.service", "renamePattern": "$1" }
+      }]
+    },
+    {
+      "id": 7,
+      "title": "All Services - Memory (Current)",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "continuous-BlYlRd" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{
+        "expr": "sort_desc(container_memory_usage_bytes{id=~\"/system.slice/.*service\"})",
+        "legendFormat": "{{ id }}",
+        "refId": "A",
+        "instant": true
+      }],
+      "transformations": [{
+        "id": "renameByRegex",
+        "options": { "regex": "/system.slice/(.*)\\.service", "renamePattern": "$1" }
+      }]
+    },
+    {
+      "id": 8,
+      "title": "All Services - CPU (Current)",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "continuous-BlYlRd" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{
+        "expr": "sort_desc(rate(container_cpu_usage_seconds_total{id=~\"/system.slice/.*service\"}[5m]))",
+        "legendFormat": "{{ id }}",
+        "refId": "A",
+        "instant": true
+      }],
+      "transformations": [{
+        "id": "renameByRegex",
+        "options": { "regex": "/system.slice/(.*)\\.service", "renamePattern": "$1" }
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Demo Apps - CPU",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        { "expr": "rate(container_cpu_usage_seconds_total{id=\"/system.slice/demo-node.service\"}[5m])", "legendFormat": "Node.js", "refId": "A" },
+        { "expr": "rate(container_cpu_usage_seconds_total{id=\"/system.slice/demo-python.service\"}[5m])", "legendFormat": "Python", "refId": "B" },
+        { "expr": "rate(container_cpu_usage_seconds_total{id=\"/system.slice/demo-php.service\"}[5m])", "legendFormat": "PHP", "refId": "C" }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Demo Apps - Memory",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "fillOpacity": 20, "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        { "expr": "container_memory_usage_bytes{id=\"/system.slice/demo-node.service\"}", "legendFormat": "Node.js", "refId": "A" },
+        { "expr": "container_memory_usage_bytes{id=\"/system.slice/demo-python.service\"}", "legendFormat": "Python", "refId": "B" },
+        { "expr": "container_memory_usage_bytes{id=\"/system.slice/demo-php.service\"}", "legendFormat": "PHP", "refId": "C" }
+      ]
+    }
+  ]
+}

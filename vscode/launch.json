@@ -1,0 +1,63 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Remote Attach (dev VM)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "dev.orb.local",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${workspaceFolder}"
+        }
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "Node: Remote Attach (dev VM)",
+      "type": "node",
+      "request": "attach",
+      "address": "dev.orb.local",
+      "port": 9229,
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "${workspaceFolder}",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "PHP: Xdebug (dev VM)",
+      "type": "php",
+      "request": "launch",
+      "port": 9003,
+      "hostname": "0.0.0.0",
+      "pathMappings": {
+        "${workspaceFolder}": "${workspaceFolder}"
+      },
+      "xdebugSettings": {
+        "max_data": 65535,
+        "show_hidden": 1,
+        "max_children": 100,
+        "max_depth": 5
+      }
+    },
+    {
+      "name": "Go: Remote Attach (dev VM)",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "${workspaceFolder}",
+      "host": "dev.orb.local",
+      "port": 2345
+    },
+    {
+      "name": "Java: Remote Attach (dev VM)",
+      "type": "java",
+      "request": "attach",
+      "hostName": "dev.orb.local",
+      "port": 5005
+    }
+  ]
+}

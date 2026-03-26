@@ -1,0 +1,60 @@
+#compdef devvm
+
+_devvm() {
+  local -a commands
+  commands=(
+    'init:Create the VM'
+    'provision:Install all stacks and observability'
+    'up:Start VM and services'
+    'down:Stop VM'
+    'stop:Stop VM'
+    'start:Start VM'
+    'restart:Restart VM'
+    'reboot:Graceful reboot'
+    'destroy:Delete VM permanently'
+    'ssh:Shell into VM'
+    'run:Run command in VM'
+    'exec:Run command as root in VM'
+    'open:Open web UI in browser'
+    'status:Show status of all services'
+    'service:Manage a systemd service'
+    'obs:Manage observability stack'
+    'debug:Start remote debugger'
+    'db:Connect to database'
+    'ports:Show port map'
+    'verify:Run health check'
+    'version:Show version'
+    'help:Show help'
+  )
+
+  _arguments -C \
+    '1:command:->command' \
+    '*::arg:->args'
+
+  case "$state" in
+    command)
+      _describe 'command' commands
+      ;;
+    args)
+      case "${words[1]}" in
+        debug)
+          _values 'language' python node php go java
+          ;;
+        db)
+          _values 'database' mysql psql redis
+          ;;
+        obs)
+          _values 'action' up down start stop restart logs status
+          ;;
+        open)
+          _values 'ui' grafana adminer prometheus loki tempo
+          ;;
+        service|svc)
+          _values 'action' start stop restart status logs
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_devvm "$@"
