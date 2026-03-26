@@ -86,10 +86,15 @@ _resolve_stack() {
     app-*)          echo "svc:$name" ;;
     *)
       # Check if it's a registered app
-      local apps_json
+      local apps_json app_type
       apps_json=$(vm_sudo cat "$VM_CONFIG/apps.json" 2>/dev/null) || apps_json='{}'
-      if echo "$apps_json" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if '$name' in d.get('apps',{}) else 1)" 2>/dev/null; then
-        echo "svc:app-$name"
+      app_type=$(echo "$apps_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('apps',{}).get('$name',{}).get('type',''))" 2>/dev/null) || app_type=""
+      if [[ -n "$app_type" ]]; then
+        if [[ "$app_type" == "static" ]]; then
+          echo "static:$name"  # static apps are Nginx-only, no systemd
+        else
+          echo "svc:app-$name"
+        fi
       else
         echo "svc:$name"  # try as raw systemd service
       fi
@@ -227,9 +232,10 @@ cmd_start() {
   local resolved
   resolved=$(_resolve_stack "$target")
   case "$resolved" in
-    svc:*)  vm_sudo systemctl start "${resolved#svc:}"; ok "$target started." ;;
-    ctr:*)  vm_sudo docker start "${resolved#ctr:}" 2>/dev/null; ok "$target started." ;;
-    obs)    _start_obs; ok "Observability started." ;;
+    static:*) ok "$target is a static site (always served by Nginx)." ;;
+    svc:*)    vm_sudo systemctl start "${resolved#svc:}"; ok "$target started." ;;
+    ctr:*)    vm_sudo docker start "${resolved#ctr:}" 2>/dev/null; ok "$target started." ;;
+    obs)      _start_obs; ok "Observability started." ;;
   esac
 }
 
@@ -254,9 +260,10 @@ cmd_stop() {
   local resolved
   resolved=$(_resolve_stack "$target")
   case "$resolved" in
-    svc:*)  vm_sudo systemctl stop "${resolved#svc:}"; ok "$target stopped." ;;
-    ctr:*)  vm_sudo docker stop "${resolved#ctr:}" 2>/dev/null; ok "$target stopped." ;;
-    obs)    _stop_obs; ok "Observability stopped." ;;
+    static:*) ok "$target is a static site (always served by Nginx)." ;;
+    svc:*)    vm_sudo systemctl stop "${resolved#svc:}"; ok "$target stopped." ;;
+    ctr:*)    vm_sudo docker stop "${resolved#ctr:}" 2>/dev/null; ok "$target stopped." ;;
+    obs)      _stop_obs; ok "Observability stopped." ;;
   esac
 }
 
@@ -281,9 +288,10 @@ cmd_restart() {
   local resolved
   resolved=$(_resolve_stack "$target")
   case "$resolved" in
-    svc:*)  vm_sudo systemctl restart "${resolved#svc:}"; ok "$target restarted." ;;
-    ctr:*)  vm_sudo docker restart "${resolved#ctr:}" 2>/dev/null; ok "$target restarted." ;;
-    obs)    vm_sudo docker compose -f "$OBS_COMPOSE" restart 2>/dev/null; ok "Observability restarted." ;;
+    static:*) vm_sudo systemctl reload nginx; ok "$target reloaded (Nginx)." ;;
+    svc:*)    vm_sudo systemctl restart "${resolved#svc:}"; ok "$target restarted." ;;
+    ctr:*)    vm_sudo docker restart "${resolved#ctr:}" 2>/dev/null; ok "$target restarted." ;;
+    obs)      vm_sudo docker compose -f "$OBS_COMPOSE" restart 2>/dev/null; ok "Observability restarted." ;;
   esac
 }
 
@@ -296,9 +304,10 @@ cmd_logs() {
   local resolved
   resolved=$(_resolve_stack "$target")
   case "$resolved" in
-    svc:*)  vm_sudo journalctl -u "${resolved#svc:}" --no-pager -f ;;
-    ctr:*)  vm_sudo docker logs -f "${resolved#ctr:}" 2>&1 ;;
-    obs)    vm_sudo docker compose -f "$OBS_COMPOSE" logs -f --tail=50 ;;
+    static:*) vm_sudo tail -f /var/log/nginx/access.log ;;
+    svc:*)    vm_sudo journalctl -u "${resolved#svc:}" --no-pager -f ;;
+    ctr:*)    vm_sudo docker logs -f "${resolved#ctr:}" 2>&1 ;;
+    obs)      vm_sudo docker compose -f "$OBS_COMPOSE" logs -f --tail=50 ;;
   esac
 }
 
@@ -505,11 +514,16 @@ cmd_db() {
   my_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mysql',{}).get('user','dev'))" 2>/dev/null) || my_user="dev"
   my_pass=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mysql',{}).get('pass','dev'))" 2>/dev/null) || my_pass="dev"
   pg_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('user','dev'))" 2>/dev/null) || pg_user="dev"
+  pg_pass=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('pass','dev'))" 2>/dev/null) || pg_pass="dev"
   pg_db=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('db','devdb'))" 2>/dev/null) || pg_db="devdb"
 
   case "$db" in
     mysql)          vm mysql -u "$my_user" -p"$my_pass" "$@" ;;
-    psql|postgres)  vm psql -U "$pg_user" "$pg_db" "$@" ;;
+    psql|postgres)
+      local pg_args=""
+      for arg in "$@"; do pg_args="$pg_args $(printf '%q' "$arg")"; done
+      vm bash -c "PGPASSWORD='$pg_pass' psql -h 127.0.0.1 -U '$pg_user' '$pg_db' $pg_args"
+      ;;
     redis)          vm redis-cli "$@" ;;
     *)
       echo "Usage: devvm db <mysql|psql|redis> [args...]"
