@@ -3,7 +3,7 @@
 # https://github.com/indranandjha/dev-vm
 set -euo pipefail
 
-readonly VERSION="2.0.0"
+readonly VERSION="2.1.0"
 readonly VM_NAME="dev"
 readonly VM_TARGET="/opt/dev-vm"
 readonly VM_CONFIG="$VM_TARGET/config"
@@ -65,6 +65,46 @@ dot() {
   fi
 }
 
+# ── Known stacks (for targeted start/stop/restart/logs/reset) ─────────────────
+
+# Maps user-facing names to systemd service or docker container names
+_resolve_stack() {
+  local name="$1"
+  case "$name" in
+    mysql)          echo "svc:mysql" ;;
+    postgres|pg)    echo "svc:postgresql" ;;
+    redis)          echo "svc:redis-server" ;;
+    nginx)          echo "svc:nginx" ;;
+    adminer)        echo "svc:adminer" ;;
+    grafana)        echo "ctr:grafana" ;;
+    prometheus)     echo "ctr:prometheus" ;;
+    loki)           echo "ctr:loki" ;;
+    tempo)          echo "ctr:tempo" ;;
+    promtail)       echo "ctr:promtail" ;;
+    cadvisor)       echo "ctr:cadvisor" ;;
+    obs|observability) echo "obs" ;;
+    app-*)          echo "svc:$name" ;;
+    *)
+      # Check if it's a registered app
+      local apps_json
+      apps_json=$(vm_sudo cat "$VM_CONFIG/apps.json" 2>/dev/null) || apps_json='{}'
+      if echo "$apps_json" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if '$name' in d.get('apps',{}) else 1)" 2>/dev/null; then
+        echo "svc:app-$name"
+      else
+        echo "svc:$name"  # try as raw systemd service
+      fi
+      ;;
+  esac
+}
+
+_start_obs() {
+  vm_sudo docker compose -f "$OBS_COMPOSE" up -d 2>/dev/null || true
+}
+
+_stop_obs() {
+  vm_sudo docker compose -f "$OBS_COMPOSE" down 2>/dev/null || true
+}
+
 # ── Machine Lifecycle ─────────────────────────────────────────────────────────
 
 cmd_init() {
@@ -95,27 +135,27 @@ cmd_init() {
 
   info "Creating Ubuntu VM '$VM_NAME'..."
   if [[ -n "$ci_file" ]]; then
-    info "Using cloud-init: $ci_file"
     orb create ubuntu "$VM_NAME" -c "$ci_file"
   else
     warn "No cloud-init config found. Creating bare VM."
     orb create ubuntu "$VM_NAME"
   fi
 
-  ok "VM created. Run 'devvm provision' to install stacks, or 'devvm up' to start."
+  ok "VM created. Provisioning..."
+  echo ""
+
+  # Auto-provision
+  _provision
 }
 
-cmd_provision() {
+_provision() {
   ensure_running
 
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local project_root="$script_dir/.."
 
-  # Check if provision files exist locally
-  if [[ ! -d "$project_root/provision" ]]; then
-    die "Provision scripts not found at $project_root/provision"
-  fi
+  [[ -d "$project_root/provision" ]] || die "Provision scripts not found at $project_root/provision"
 
   info "Waiting for cloud-init..."
   vm_sudo cloud-init status --wait 2>/dev/null || true
@@ -131,7 +171,6 @@ cmd_provision() {
     for f in "$project_root/$dir"/*; do
       [[ -f "$f" ]] && vm_sudo bash -c "cat > $VM_TARGET/$dir/$(basename "$f")" < "$f"
     done
-    # Handle subdirectories (observability has nested dirs)
     find "$project_root/$dir" -mindepth 2 -type f 2>/dev/null | while read -r f; do
       local rel="${f#$project_root/$dir/}"
       local rdir="$(dirname "$rel")"
@@ -144,96 +183,174 @@ cmd_provision() {
   vm_sudo chown -R root:root "$VM_TARGET"
   vm_sudo find "$VM_TARGET" -name "*.sh" -exec chmod +x {} \;
 
-  info "Running provisioning..."
+  info "Installing stacks..."
   vm_sudo bash "$VM_TARGET/provision/post-init.sh"
 
   info "Installing exporters..."
   vm_sudo bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
 
-  info "Installing systemd services..."
+  info "Enabling services..."
   vm_sudo bash -c 'cp '"$VM_TARGET"'/systemd/*.service /etc/systemd/system/ 2>/dev/null; systemctl daemon-reload' || true
   for svc in node-exporter adminer mysqld-exporter postgres-exporter redis-exporter; do
     vm_sudo systemctl enable --now "$svc" 2>/dev/null || true
   done
 
-  info "Starting observability stack..."
-  vm_sudo docker compose -f "$OBS_COMPOSE" up -d 2>/dev/null || warn "Docker compose failed (try 'devvm obs up')"
+  info "Starting observability..."
+  _start_obs
 
-  ok "Provisioning complete."
+  ok "Ready."
   echo ""
   cmd_status
 }
 
-cmd_up() {
+cmd_start() {
   ensure_orb
-  ensure_exists
+  local target="${1:-}"
 
-  if vm_running; then
-    ok "VM is already running."
+  # No arg: start the whole VM
+  if [[ -z "$target" ]]; then
+    ensure_exists
+    if vm_running; then
+      ok "Already running."
+      return
+    fi
+    info "Starting VM..."
+    orb start "$VM_NAME"
+    sleep 2
+    _start_obs
+    ok "VM is running."
     return
   fi
 
-  info "Starting VM..."
-  orb start "$VM_NAME"
-  sleep 2
-
-  # Start observability if compose exists
-  if vm bash -c "test -f $OBS_COMPOSE" 2>/dev/null; then
-    info "Starting observability stack..."
-    vm_sudo docker compose -f "$OBS_COMPOSE" up -d 2>/dev/null || true
-  fi
-
-  ok "VM is running."
-}
-
-cmd_down() {
-  ensure_exists
-  if ! vm_running; then
-    warn "VM is already stopped."
-    return
-  fi
-  warn "Stopping VM..."
-  orb stop "$VM_NAME"
-  ok "VM stopped."
-}
-
-cmd_restart() {
-  ensure_exists
-  warn "Restarting VM..."
-  orb stop "$VM_NAME" 2>/dev/null || true
-  sleep 1
-  orb start "$VM_NAME"
-  sleep 2
-
-  if vm bash -c "test -f $OBS_COMPOSE" 2>/dev/null; then
-    info "Starting observability stack..."
-    vm_sudo docker compose -f "$OBS_COMPOSE" up -d 2>/dev/null || true
-  fi
-
-  ok "VM restarted."
-}
-
-cmd_reboot() {
+  # With arg: start a specific stack
   ensure_running
-  warn "Rebooting VM (graceful)..."
-  vm_sudo reboot 2>/dev/null || true
-  sleep 3
-
-  local tries=0
-  while ! vm_running && (( tries < 20 )); do
-    sleep 1
-    (( tries++ ))
-  done
-
-  if vm_running; then
-    ok "VM rebooted."
-  else
-    warn "VM not yet running. It may still be booting."
-  fi
+  local resolved
+  resolved=$(_resolve_stack "$target")
+  case "$resolved" in
+    svc:*)  vm_sudo systemctl start "${resolved#svc:}"; ok "$target started." ;;
+    ctr:*)  vm_sudo docker start "${resolved#ctr:}" 2>/dev/null; ok "$target started." ;;
+    obs)    _start_obs; ok "Observability started." ;;
+  esac
 }
 
 cmd_stop() {
-  cmd_down "$@"
+  local target="${1:-}"
+
+  # No arg: stop the whole VM
+  if [[ -z "$target" ]]; then
+    ensure_exists
+    if ! vm_running; then
+      warn "Already stopped."
+      return
+    fi
+    warn "Stopping VM..."
+    orb stop "$VM_NAME"
+    ok "VM stopped."
+    return
+  fi
+
+  # With arg: stop a specific stack
+  ensure_running
+  local resolved
+  resolved=$(_resolve_stack "$target")
+  case "$resolved" in
+    svc:*)  vm_sudo systemctl stop "${resolved#svc:}"; ok "$target stopped." ;;
+    ctr:*)  vm_sudo docker stop "${resolved#ctr:}" 2>/dev/null; ok "$target stopped." ;;
+    obs)    _stop_obs; ok "Observability stopped." ;;
+  esac
+}
+
+cmd_restart() {
+  local target="${1:-}"
+
+  # No arg: restart the whole VM
+  if [[ -z "$target" ]]; then
+    ensure_exists
+    warn "Restarting VM..."
+    orb stop "$VM_NAME" 2>/dev/null || true
+    sleep 1
+    orb start "$VM_NAME"
+    sleep 2
+    _start_obs
+    ok "VM restarted."
+    return
+  fi
+
+  # With arg: restart a specific stack
+  ensure_running
+  local resolved
+  resolved=$(_resolve_stack "$target")
+  case "$resolved" in
+    svc:*)  vm_sudo systemctl restart "${resolved#svc:}"; ok "$target restarted." ;;
+    ctr:*)  vm_sudo docker restart "${resolved#ctr:}" 2>/dev/null; ok "$target restarted." ;;
+    obs)    vm_sudo docker compose -f "$OBS_COMPOSE" restart 2>/dev/null; ok "Observability restarted." ;;
+  esac
+}
+
+cmd_logs() {
+  ensure_running
+  local target="${1:-}"
+
+  [[ -n "$target" ]] || die "Usage: devvm logs <stack|app|service>"
+
+  local resolved
+  resolved=$(_resolve_stack "$target")
+  case "$resolved" in
+    svc:*)  vm_sudo journalctl -u "${resolved#svc:}" --no-pager -f ;;
+    ctr:*)  vm_sudo docker logs -f "${resolved#ctr:}" 2>&1 ;;
+    obs)    vm_sudo docker compose -f "$OBS_COMPOSE" logs -f --tail=50 ;;
+  esac
+}
+
+cmd_reset() {
+  local target="${1:-}"
+
+  # No arg: full rebuild
+  if [[ -z "$target" ]]; then
+    ensure_exists
+    warn "This will destroy and rebuild the entire VM."
+    read -rp "Continue? (yes/no): " ans
+    [[ "$ans" == "yes" ]] || { echo "Aborted."; return; }
+    orb delete "$VM_NAME" -f 2>/dev/null || true
+    sleep 2
+    cmd_init
+    return
+  fi
+
+  # With arg: reset a specific stack
+  ensure_running
+  local resolved
+  resolved=$(_resolve_stack "$target")
+  case "$resolved" in
+    svc:mysql)
+      vm_sudo mysql -u root -e "DROP USER IF EXISTS 'dev'@'%'; CREATE USER 'dev'@'%' IDENTIFIED BY 'dev'; GRANT ALL ON *.* TO 'dev'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES;" 2>/dev/null
+      vm_sudo systemctl restart mysql
+      ok "MySQL reset (user: dev/dev)."
+      ;;
+    svc:postgresql)
+      vm_sudo bash -c "sudo -u postgres psql -c \"ALTER USER dev WITH PASSWORD 'dev';\"" 2>/dev/null
+      vm_sudo systemctl restart postgresql
+      ok "PostgreSQL reset (user: dev/dev)."
+      ;;
+    svc:redis-server)
+      vm_sudo bash -c "sed -i 's/^requirepass.*/# requirepass/' /etc/redis/redis.conf"
+      vm_sudo systemctl restart redis-server
+      ok "Redis reset (no password)."
+      ;;
+    obs)
+      _stop_obs
+      _start_obs
+      ok "Observability restarted."
+      ;;
+    svc:*)
+      vm_sudo systemctl restart "${resolved#svc:}"
+      ok "$target restarted."
+      ;;
+    ctr:*)
+      vm_sudo docker restart "${resolved#ctr:}" 2>/dev/null
+      ok "$target restarted."
+      ;;
+  esac
 }
 
 cmd_ssh() {
@@ -248,7 +365,6 @@ cmd_ssh() {
 cmd_destroy() {
   ensure_exists
   echo -e "${R}${B}WARNING: This permanently deletes the VM and ALL its data.${N}"
-  echo -e "${R}Databases, configs, and observability data will be lost.${N}"
   read -rp "Type 'destroy' to confirm: " ans
   [[ "$ans" == "destroy" ]] || { echo "Aborted."; return; }
   orb delete "$VM_NAME" -f
@@ -261,7 +377,7 @@ cmd_status() {
   ensure_orb
 
   if ! vm_exists; then
-    echo -e "${R}VM '$VM_NAME' does not exist. Run 'devvm init' to create.${N}"
+    echo -e "${R}VM does not exist. Run 'devvm init' to create.${N}"
     return
   fi
 
@@ -271,7 +387,7 @@ cmd_status() {
   if ! vm_running; then
     echo -e "  State: ${R}stopped${N}"
     echo ""
-    echo "  Run 'devvm up' to start."
+    echo "  Run 'devvm start' to start."
     return
   fi
 
@@ -280,12 +396,6 @@ cmd_status() {
 
   echo -e "${B}Databases${N}"
   for svc in mysql postgresql redis-server; do
-    dot "$(svc_status "$svc")" "$svc"
-  done
-
-  echo ""
-  echo -e "${B}Exporters${N}"
-  for svc in node-exporter mysqld-exporter postgres-exporter redis-exporter; do
     dot "$(svc_status "$svc")" "$svc"
   done
 
@@ -317,83 +427,6 @@ for name in d.get('apps', {}):
 
   echo ""
   cmd_ports
-}
-
-# ── Service Management ────────────────────────────────────────────────────────
-
-cmd_service() {
-  ensure_running
-  local action="${1:-}" name="${2:-}"
-
-  [[ -n "$action" && -n "$name" ]] || {
-    echo "Usage: devvm service <start|stop|restart|status|logs> <name>"
-    echo ""
-    echo "Examples:"
-    echo "  devvm service restart mysql"
-    echo "  devvm service logs demo-node"
-    echo "  devvm service stop demo-python"
-    return
-  }
-
-  case "$action" in
-    start|stop|restart)
-      vm_sudo systemctl "$action" "$name"
-      ok "$name: $action done"
-      ;;
-    status)
-      vm_sudo systemctl status "$name" --no-pager -l
-      ;;
-    logs)
-      vm_sudo journalctl -u "$name" --no-pager -f
-      ;;
-    *)
-      die "Unknown action: $action (use start|stop|restart|status|logs)"
-      ;;
-  esac
-}
-
-# ── Observability ─────────────────────────────────────────────────────────────
-
-cmd_obs() {
-  ensure_running
-  local action="${1:-status}"
-  shift 2>/dev/null || true
-
-  case "$action" in
-    up|start)
-      info "Starting observability stack..."
-      vm_sudo docker compose -f "$OBS_COMPOSE" up -d
-      ok "Observability running."
-      echo "  Grafana:    http://$HOST:3000"
-      echo "  Prometheus: http://$HOST:9090"
-      ;;
-    down|stop)
-      warn "Stopping observability stack..."
-      vm_sudo docker compose -f "$OBS_COMPOSE" down
-      ok "Stopped."
-      ;;
-    restart)
-      vm_sudo docker compose -f "$OBS_COMPOSE" restart "$@"
-      ok "Restarted."
-      ;;
-    logs)
-      if [[ $# -gt 0 ]]; then
-        vm_sudo docker compose -f "$OBS_COMPOSE" logs -f "$@"
-      else
-        vm_sudo docker compose -f "$OBS_COMPOSE" logs -f --tail=50
-      fi
-      ;;
-    status)
-      for ctr in grafana prometheus loki tempo promtail cadvisor; do
-        local st
-        st=$(vm docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null) || st="not found"
-        dot "$st" "$ctr"
-      done
-      ;;
-    *)
-      echo "Usage: devvm obs <up|down|restart|logs|status> [service]"
-      ;;
-  esac
 }
 
 # ── Open UIs ──────────────────────────────────────────────────────────────────
@@ -1001,54 +1034,53 @@ cmd_help() {
 ${B}devvm${N} v${VERSION} — Developer VM manager for OrbStack
 
 ${B}USAGE${N}
-  devvm <command> [args...]
+  devvm <command> [target]
 
-${B}MACHINE${N}
-  init [cloud-init.yaml]   Create the VM (optionally with cloud-init config)
-  provision                Install all stacks, databases, observability
-  up                       Start VM + observability
-  down | stop              Stop VM
-  restart                  Stop and start VM
-  reboot                   Graceful reboot (keeps data)
-  destroy                  Delete VM and all data
+${B}LIFECYCLE${N}
+  init                     Create VM and install everything
+  start [stack]            Start VM, or start a specific stack
+  stop [stack]             Stop VM, or stop a specific stack
+  restart [stack]          Restart VM, or restart a specific stack
+  reset [stack]            Rebuild VM, or reset a specific stack to defaults
+  destroy                  Delete VM permanently
 
-${B}ACCESS${N}
-  ssh [command]            Shell into VM, or run a command
-  run <cmd>                Run command in VM as user
-  exec <cmd>               Run command in VM as root
-  open <ui>                Open web UI (grafana|adminer|prometheus)
+${B}STACKS${N}
+  Targets: mysql, postgres, redis, nginx, grafana, prometheus, loki,
+           tempo, promtail, cadvisor, obs (all observability), <app-name>
 
-${B}SERVICES${N}
-  status                   Show VM, services, and ports
-  service <action> <name>  Manage systemd service (start|stop|restart|status|logs)
-  obs <action> [service]   Manage observability (up|down|restart|logs|status)
+${B}APPS${N}
+  app add <name> --path <dir> --type <type> [--port N]
+  app create <name> --template <type>
+  app list
+  app remove <name>
 
 ${B}DEVELOP${N}
+  db <mysql|psql|redis>    Connect to database
   debug <lang> [file]      Start remote debugger (python|node|php|go|java)
-  db <engine> [args]       Connect to database (mysql|psql|redis)
-  creds [show|set|reset]   View and manage database credentials
-  app <action> [name]      Manage hosted applications
+  creds [show|set|reset]   View and manage credentials
+  logs <stack|app>         Tail logs for any stack or app
 
-${B}INFO${N}
+${B}ACCESS${N}
+  ssh [command]            Shell into VM or run a command
+  run <cmd>                Run command as user
+  exec <cmd>               Run command as root
+  open <ui>                Open web UI (grafana|adminer|prometheus)
+  status                   Show everything
   ports                    Show port map
-  verify                   Run full health check
-  version                  Show version
-  help                     Show this help
+  verify                   Run health check
 
 ${B}EXAMPLES${N}
-  devvm up                         Start everything
-  devvm ssh                        Open VM shell
-  devvm db mysql                   Connect to MySQL
-  devvm debug python app.py        Debug Python script
-  devvm service restart mysql      Restart MySQL
-  devvm obs logs grafana           Tail Grafana logs
-  devvm open grafana               Open Grafana in browser
-  devvm run node --version         Run command in VM
-  devvm creds                      View all credentials
-  devvm creds set mysql --pass X   Update MySQL password
+  devvm init                           Set up everything from scratch
+  devvm start                          Start the VM
+  devvm stop mysql                     Stop just MySQL
+  devvm restart redis                  Restart Redis
+  devvm logs grafana                   Tail Grafana logs
+  devvm reset postgres                 Reset PostgreSQL to defaults
   devvm app add blog --path ~/blog --type laravel
-  devvm app list                   List hosted apps
-  devvm app create api -t fastapi  Scaffold and host new app
+  devvm app create api -t fastapi      Scaffold + host new app
+  devvm creds set mysql --pass secret  Change MySQL password
+  devvm db mysql                       Open MySQL shell
+  devvm debug python app.py            Debug Python script
 EOF
 }
 
@@ -1060,19 +1092,17 @@ main() {
 
   case "$cmd" in
     init)                 cmd_init "$@" ;;
-    provision)            cmd_provision "$@" ;;
-    up|start)             cmd_up "$@" ;;
-    down|stop)            cmd_down "$@" ;;
+    start|up)             cmd_start "$@" ;;
+    stop|down)            cmd_stop "$@" ;;
     restart)              cmd_restart "$@" ;;
-    reboot)               cmd_reboot "$@" ;;
+    reset)                cmd_reset "$@" ;;
     destroy)              cmd_destroy "$@" ;;
+    logs)                 cmd_logs "$@" ;;
     ssh)                  cmd_ssh "$@" ;;
     run)                  cmd_run "$@" ;;
     exec)                 cmd_exec "$@" ;;
     open)                 cmd_open "$@" ;;
     status|st)            cmd_status "$@" ;;
-    service|svc)          cmd_service "$@" ;;
-    obs)                  cmd_obs "$@" ;;
     debug)                cmd_debug "$@" ;;
     db)                   cmd_db "$@" ;;
     creds)                cmd_creds "$@" ;;

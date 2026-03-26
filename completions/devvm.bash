@@ -4,11 +4,15 @@ _devvm() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="init provision up down stop start restart reboot destroy ssh run exec open status service obs debug db creds app ports verify version help"
+  local stacks="mysql postgres redis nginx grafana prometheus loki tempo promtail cadvisor obs"
+  commands="init start stop restart reset destroy logs ssh run exec open status debug db creds app ports verify version help"
 
   case "$prev" in
     devvm)
       COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+      ;;
+    start|stop|restart|reset|logs)
+      COMPREPLY=($(compgen -W "$stacks" -- "$cur"))
       ;;
     debug)
       COMPREPLY=($(compgen -W "python node php go java" -- "$cur"))
@@ -16,20 +20,14 @@ _devvm() {
     db)
       COMPREPLY=($(compgen -W "mysql psql redis" -- "$cur"))
       ;;
-    obs)
-      COMPREPLY=($(compgen -W "up down start stop restart logs status" -- "$cur"))
-      ;;
     open)
       COMPREPLY=($(compgen -W "grafana adminer prometheus loki tempo" -- "$cur"))
-      ;;
-    service|svc)
-      COMPREPLY=($(compgen -W "start stop restart status logs" -- "$cur"))
       ;;
     creds)
       COMPREPLY=($(compgen -W "list show set reset" -- "$cur"))
       ;;
     app)
-      COMPREPLY=($(compgen -W "add remove list start stop restart logs create" -- "$cur"))
+      COMPREPLY=($(compgen -W "add remove list create" -- "$cur"))
       ;;
   esac
 }

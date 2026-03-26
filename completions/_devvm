@@ -3,22 +3,18 @@
 _devvm() {
   local -a commands
   commands=(
-    'init:Create the VM'
-    'provision:Install all stacks and observability'
-    'up:Start VM and services'
-    'down:Stop VM'
-    'stop:Stop VM'
-    'start:Start VM'
-    'restart:Restart VM'
-    'reboot:Graceful reboot'
+    'init:Create VM and install everything'
+    'start:Start VM or a specific stack'
+    'stop:Stop VM or a specific stack'
+    'restart:Restart VM or a specific stack'
+    'reset:Rebuild VM or reset a stack to defaults'
     'destroy:Delete VM permanently'
+    'logs:Tail logs for any stack or app'
     'ssh:Shell into VM'
     'run:Run command in VM'
     'exec:Run command as root in VM'
     'open:Open web UI in browser'
     'status:Show status of all services'
-    'service:Manage a systemd service'
-    'obs:Manage observability stack'
     'debug:Start remote debugger'
     'db:Connect to database'
     'creds:Manage database credentials'
@@ -39,26 +35,23 @@ _devvm() {
       ;;
     args)
       case "${words[1]}" in
+        start|stop|restart|reset|logs)
+          _values 'stack' mysql postgres redis nginx grafana prometheus loki tempo promtail cadvisor obs
+          ;;
         debug)
           _values 'language' python node php go java
           ;;
         db)
           _values 'database' mysql psql redis
           ;;
-        obs)
-          _values 'action' up down start stop restart logs status
-          ;;
         open)
           _values 'ui' grafana adminer prometheus loki tempo
-          ;;
-        service|svc)
-          _values 'action' start stop restart status logs
           ;;
         creds)
           _values 'action' list show set reset
           ;;
         app)
-          _values 'action' add remove list start stop restart logs create
+          _values 'action' add remove list create
           ;;
       esac
       ;;
