@@ -420,6 +420,27 @@ cmd_status() {
   echo -e "  State: ${G}running${N}"
   echo ""
 
+  echo -e "${B}Languages${N}"
+  local lang_ver
+  lang_ver=$(vm bash -c 'export FNM_DIR="/usr/local/share/fnm"; eval "$(fnm env --shell bash 2>/dev/null)"; node --version 2>/dev/null || echo ""') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} Node.js $lang_ver" || echo -e "  ${R}●${N} Node.js (not installed)"
+
+  lang_ver=$(vm python3 --version 2>/dev/null | awk '{print $2}') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} Python $lang_ver" || echo -e "  ${R}●${N} Python (not installed)"
+
+  lang_ver=$(vm php -v 2>/dev/null | head -1 | awk '{print $2}') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} PHP $lang_ver" || echo -e "  ${R}●${N} PHP (not installed)"
+
+  lang_ver=$(vm bash -c 'export PATH="/usr/local/go/bin:$PATH"; go version 2>/dev/null' | awk '{print $3}') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} Go ${lang_ver#go}" || echo -e "  ${R}●${N} Go (not installed)"
+
+  lang_ver=$(vm bash -c 'source ~/.cargo/env 2>/dev/null; rustc --version 2>/dev/null' | awk '{print $2}') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} Rust $lang_ver" || echo -e "  ${R}●${N} Rust (not installed)"
+
+  lang_ver=$(vm java --version 2>/dev/null | head -1 | awk '{print $2}') || lang_ver=""
+  [[ -n "$lang_ver" ]] && echo -e "  ${G}●${N} Java $lang_ver" || echo -e "  ${R}●${N} Java (not installed)"
+
+  echo ""
   echo -e "${B}Databases${N}"
   for svc in mysql postgresql redis-server; do
     dot "$(svc_status "$svc")" "$svc"
