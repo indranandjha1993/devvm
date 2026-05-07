@@ -3,10 +3,11 @@
 # https://github.com/indranandjha1993/devvm
 set -euo pipefail
 
-readonly VERSION="2.1.0"
+readonly VERSION="2.2.0"
 readonly VM_NAME="dev"
 readonly VM_TARGET="/opt/dev-vm"
 readonly VM_CONFIG="$VM_TARGET/config"
+readonly VM_VERSION_FILE="$VM_TARGET/.devvm-version"
 readonly OBS_COMPOSE="$VM_TARGET/observability/docker-compose.yml"
 readonly HOST="dev.orb.local"
 
@@ -49,6 +50,69 @@ ensure_running() {
 vm()      { orb -m "$VM_NAME" "$@"; }
 vm_sudo() { orb -m "$VM_NAME" sudo "$@"; }
 
+# Resolve where provision/, observability/, systemd/ live on the host.
+# Order: working tree → $DEVVM_HOME → ~/.devvm → brew prefix.
+_resolve_root() {
+  local sd
+  sd="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local c
+  for c in \
+    "$sd/.." \
+    "${DEVVM_HOME:-}" \
+    "$HOME/.devvm" \
+    "$(brew --prefix devvm 2>/dev/null)/share/devvm" \
+    "$(brew --prefix 2>/dev/null)/share/devvm"; do
+    [[ -n "$c" && -d "$c/provision" ]] && { echo "$c"; return 0; }
+  done
+  return 1
+}
+
+_vm_version() {
+  vm_sudo cat "$VM_VERSION_FILE" 2>/dev/null || echo "0.0.0"
+}
+
+_set_vm_version() {
+  vm_sudo bash -c "echo '$VERSION' > $VM_VERSION_FILE" 2>/dev/null || true
+}
+
+# True if $1 < $2 by version sort
+_ver_lt() {
+  [[ "$1" != "$2" ]] && [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" == "$1" ]]
+}
+
+_check_drift() {
+  local vm_ver
+  vm_ver=$(_vm_version)
+  if [[ "$vm_ver" != "$VERSION" && "$vm_ver" != "0.0.0" ]]; then
+    warn "VM is on $vm_ver, devvm is on $VERSION. Run 'devvm upgrade' to sync."
+    echo ""
+  fi
+}
+
+# Push host project_root files into the VM under $VM_TARGET.
+# Touches scripts/configs only — never user data dirs (mysql/pg/redis/minio).
+_push_files() {
+  local project_root="$1"
+
+  vm_sudo mkdir -p "$VM_TARGET"
+  vm_sudo chmod 777 "$VM_TARGET"
+
+  for dir in provision observability systemd; do
+    [[ -d "$project_root/$dir" ]] || continue
+    while IFS= read -r f <&3; do
+      local rel="${f#$project_root/$dir/}"
+      local rdir
+      rdir="$(dirname "$rel")"
+      vm_sudo mkdir -p "$VM_TARGET/$dir/$rdir"
+      vm_sudo bash -c "cat > $VM_TARGET/$dir/$rel" < "$f"
+    done 3< <(find "$project_root/$dir" -type f 2>/dev/null)
+  done
+  [[ -f "$project_root/verify.sh" ]] && vm_sudo bash -c "cat > $VM_TARGET/verify.sh" < "$project_root/verify.sh"
+
+  vm_sudo chown -R root:root "$VM_TARGET" 2>/dev/null || true
+  vm_sudo find "$VM_TARGET" -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+}
+
 svc_status() {
   local name="$1"
   local status
@@ -82,6 +146,7 @@ _resolve_stack() {
     tempo)          echo "ctr:tempo" ;;
     promtail)       echo "ctr:promtail" ;;
     cadvisor)       echo "ctr:cadvisor" ;;
+    minio|s3)       echo "svc:minio" ;;
     obs|observability) echo "obs" ;;
     app-*)          echo "svc:$name" ;;
     *)
@@ -156,36 +221,14 @@ cmd_init() {
 _provision() {
   ensure_running
 
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local project_root="$script_dir/.."
-
-  [[ -d "$project_root/provision" ]] || die "Provision scripts not found at $project_root/provision"
+  local project_root
+  project_root=$(_resolve_root) || die "Provision scripts not found. Set DEVVM_HOME or reinstall devvm."
 
   info "Waiting for cloud-init..."
   vm_sudo cloud-init status --wait 2>/dev/null || true
 
   info "Pushing files to VM..."
-  vm_sudo mkdir -p "$VM_TARGET"
-  vm_sudo chmod 777 "$VM_TARGET"
-
-  for dir in provision observability systemd; do
-    [[ -d "$project_root/$dir" ]] || continue
-
-    # Push all files (including nested subdirectories)
-    # Uses fd 3 for the file list to avoid conflicts with stdin redirection
-    while IFS= read -r f <&3; do
-      local rel="${f#$project_root/$dir/}"
-      local rdir
-      rdir="$(dirname "$rel")"
-      vm_sudo mkdir -p "$VM_TARGET/$dir/$rdir"
-      vm_sudo bash -c "cat > $VM_TARGET/$dir/$rel" < "$f"
-    done 3< <(find "$project_root/$dir" -type f 2>/dev/null)
-  done
-  [[ -f "$project_root/verify.sh" ]] && vm_sudo bash -c "cat > $VM_TARGET/verify.sh" < "$project_root/verify.sh"
-
-  vm_sudo chown -R root:root "$VM_TARGET"
-  vm_sudo find "$VM_TARGET" -name "*.sh" -exec chmod +x {} \;
+  _push_files "$project_root"
 
   info "[1/6] Installing languages..."
   vm_sudo bash "$VM_TARGET/provision/install-languages.sh"
@@ -219,6 +262,8 @@ _provision() {
 
   info "Starting observability..."
   _start_obs
+
+  _set_vm_version
 
   ok "Ready."
   echo ""
@@ -363,6 +408,14 @@ cmd_reset() {
       vm_sudo systemctl restart redis-server
       ok "Redis reset (no password)."
       ;;
+    svc:minio)
+      vm_sudo bash -c '
+        sed -i "s|^MINIO_ROOT_USER=.*|MINIO_ROOT_USER=\"dev\"|" /etc/default/minio
+        sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=\"devdevdev\"|" /etc/default/minio
+      '
+      vm_sudo systemctl restart minio
+      ok "MinIO reset (user: dev/devdevdev). Note: existing buckets and data preserved."
+      ;;
     obs)
       _stop_obs
       _start_obs
@@ -420,6 +473,8 @@ cmd_status() {
   echo -e "  State: ${G}running${N}"
   echo ""
 
+  _check_drift
+
   echo -e "${B}Languages${N}"
   local lang_ver
   lang_ver=$(vm bash -c 'export FNM_DIR="/usr/local/share/fnm"; eval "$(fnm env --shell bash 2>/dev/null)"; node --version 2>/dev/null || echo ""') || lang_ver=""
@@ -442,7 +497,7 @@ cmd_status() {
 
   echo ""
   echo -e "${B}Databases${N}"
-  for svc in mysql postgresql redis-server; do
+  for svc in mysql postgresql redis-server minio; do
     dot "$(svc_status "$svc")" "$svc"
   done
 
@@ -488,7 +543,8 @@ cmd_open() {
     prometheus) url="http://$HOST:9090" ;;
     loki)       url="http://$HOST:3100" ;;
     tempo)      url="http://$HOST:3200" ;;
-    *)          die "Unknown UI: $target (grafana|adminer|prometheus|loki|tempo)" ;;
+    minio|s3)   url="http://$HOST:9001" ;;
+    *)          die "Unknown UI: $target (grafana|adminer|prometheus|loki|tempo|minio)" ;;
   esac
 
   info "Opening $url"
@@ -554,6 +610,9 @@ cmd_db() {
   pg_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('user','dev'))" 2>/dev/null) || pg_user="dev"
   pg_pass=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('pass','dev'))" 2>/dev/null) || pg_pass="dev"
   pg_db=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('postgres',{}).get('db','devdb'))" 2>/dev/null) || pg_db="devdb"
+  local mi_user mi_pass
+  mi_user=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('minio',{}).get('user','dev'))" 2>/dev/null) || mi_user="dev"
+  mi_pass=$(echo "$creds" | python3 -c "import json,sys; print(json.load(sys.stdin).get('minio',{}).get('pass','devdevdev'))" 2>/dev/null) || mi_pass="devdevdev"
 
   case "$db" in
     mysql)          vm mysql -u "$my_user" -p"$my_pass" "$@" ;;
@@ -563,8 +622,15 @@ cmd_db() {
       vm bash -c "PGPASSWORD='$pg_pass' psql -h 127.0.0.1 -U '$pg_user' '$pg_db' $pg_args"
       ;;
     redis)          vm redis-cli "$@" ;;
+    minio|mc)
+      # mc with an inline alias 'local' — doesn't touch ~/.mc/config.json
+      local mc_args=""
+      for arg in "$@"; do mc_args="$mc_args $(printf '%q' "$arg")"; done
+      [[ -z "$mc_args" ]] && mc_args=" --help"
+      vm bash -c "MC_HOST_local='http://$mi_user:$mi_pass@127.0.0.1:9000' mc $mc_args"
+      ;;
     *)
-      echo "Usage: devvm db <mysql|psql|redis> [args...]"
+      echo "Usage: devvm db <mysql|psql|redis|minio> [args...]"
       ;;
   esac
 }
@@ -691,6 +757,18 @@ print(json.dumps(c))
         grafana)
           ok "Grafana credentials updated in config. Restart Grafana to apply: devvm obs restart grafana"
           ;;
+        minio)
+          # Rewrite /etc/default/minio in place, then restart
+          if [[ -n "$user" || -n "$pass" ]]; then
+            local set_u="${user:-}" set_p="${pass:-}"
+            vm_sudo bash -c '
+              [ -n "'"$set_u"'" ] && sed -i "s|^MINIO_ROOT_USER=.*|MINIO_ROOT_USER=\"'"$set_u"'\"|" /etc/default/minio
+              [ -n "'"$set_p"'" ] && sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=\"'"$set_p"'\"|" /etc/default/minio
+            ' 2>/dev/null || true
+            vm_sudo systemctl restart minio 2>/dev/null || true
+            ok "MinIO credentials updated and service restarted."
+          fi
+          ;;
       esac
       ;;
 
@@ -698,7 +776,7 @@ print(json.dumps(c))
       local svc="${1:-}"
       [[ -n "$svc" ]] || die "Usage: devvm creds reset <mysql|postgres|redis|grafana>"
 
-      local defaults='{"mysql":{"user":"dev","pass":"dev","host":"127.0.0.1","port":3306,"db":"devdb"},"postgres":{"user":"dev","pass":"dev","host":"127.0.0.1","port":5432,"db":"devdb"},"redis":{"pass":"","host":"127.0.0.1","port":6379},"grafana":{"user":"admin","pass":"admin","port":3000}}'
+      local defaults='{"mysql":{"user":"dev","pass":"dev","host":"127.0.0.1","port":3306,"db":"devdb"},"postgres":{"user":"dev","pass":"dev","host":"127.0.0.1","port":5432,"db":"devdb"},"redis":{"pass":"","host":"127.0.0.1","port":6379},"grafana":{"user":"admin","pass":"admin","port":3000},"minio":{"user":"dev","pass":"devdevdev","host":"127.0.0.1","port":9000,"console":9001}}'
 
       local creds
       creds=$(_creds_read) || die "Cannot read credentials."
@@ -726,6 +804,13 @@ print(json.dumps(c))
           vm_sudo bash -c "sed -i 's/^requirepass.*/# requirepass/' /etc/redis/redis.conf"
           vm_sudo systemctl restart redis-server 2>/dev/null || true
           ;;
+        minio)
+          vm_sudo bash -c '
+            sed -i "s|^MINIO_ROOT_USER=.*|MINIO_ROOT_USER=\"dev\"|" /etc/default/minio
+            sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=\"devdevdev\"|" /etc/default/minio
+          ' 2>/dev/null || true
+          vm_sudo systemctl restart minio 2>/dev/null || true
+          ;;
       esac
       ok "$svc credentials reset to defaults."
       ;;
@@ -738,7 +823,7 @@ print(json.dumps(c))
       echo "  set <service> --user X --pass Y [--db Z]"
       echo "  reset <service>              Reset to defaults"
       echo ""
-      echo "Services: mysql, postgres, redis, grafana"
+      echo "Services: mysql, postgres, redis, grafana, minio"
       ;;
   esac
 }
@@ -1056,6 +1141,8 @@ cmd_ports() {
   printf "  %-18s %-6s %s\n" "MySQL"        3306 "dev/dev"
   printf "  %-18s %-6s %s\n" "PostgreSQL"   5432 "dev/dev (db: devdb)"
   printf "  %-18s %-6s %s\n" "Redis"        6379 "(no auth)"
+  printf "  %-18s %-6s %s\n" "MinIO API"    9000 "dev/devdevdev (S3, default bucket: dev)"
+  printf "  %-18s %-6s %s\n" "MinIO Console" 9001 "http://$HOST:9001"
   echo ""
   echo -e "${B}Debuggers${N}"
   printf "  ${D}%-18s %-6s %s${N}\n" "NAME" "PORT" "DIRECTION"
@@ -1079,6 +1166,105 @@ cmd_version() {
   echo "devvm $VERSION"
 }
 
+# ── Upgrade ───────────────────────────────────────────────────────────────────
+# Non-destructive sync of provision/observability/systemd from host into VM,
+# plus delta installers. Safe to run on a live VM — does not restart mysql,
+# postgres, redis, nginx, or apps. Prometheus is live-reloaded (no downtime).
+
+cmd_upgrade() {
+  ensure_running
+
+  local component="" check="false" force="false"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --check) check="true"; shift ;;
+      --force) force="true"; shift ;;
+      -*) die "Unknown flag: $1" ;;
+      *)  component="$1"; shift ;;
+    esac
+  done
+
+  local project_root
+  project_root=$(_resolve_root) || die "Provision scripts not found. Reinstall devvm."
+
+  # Refuse if VM was never provisioned
+  if ! vm_sudo test -d "$VM_TARGET/provision" 2>/dev/null; then
+    die "VM not provisioned. Run 'devvm init' first."
+  fi
+
+  local mac_ver vm_ver
+  mac_ver="$VERSION"
+  vm_ver=$(_vm_version)
+
+  # No-op shortcut for full upgrade when already in sync
+  if [[ -z "$component" && "$mac_ver" == "$vm_ver" && "$force" != "true" ]]; then
+    ok "Already in sync (v$mac_ver). Use --force to re-run."
+    return
+  fi
+
+  if [[ -n "$component" ]]; then
+    info "Upgrading component: $component"
+  else
+    info "Upgrading VM: $vm_ver → $mac_ver"
+  fi
+
+  # Dry-run plan
+  if [[ "$check" == "true" ]]; then
+    echo ""
+    echo "  Would push: provision/  observability/  systemd/  verify.sh"
+    if [[ -n "$component" ]]; then
+      echo "  Would run:  provision/install-${component}.sh"
+    else
+      echo "  Would apply delta scripts in provision/upgrades/ where:"
+      echo "    $vm_ver < script_version <= $mac_ver"
+      local upd="$project_root/provision/upgrades"
+      if [[ -d "$upd" ]]; then
+        local f
+        for f in $(ls "$upd"/*.sh 2>/dev/null | sort -V); do
+          local up_ver
+          up_ver=$(basename "$f" .sh)
+          if _ver_lt "$vm_ver" "$up_ver" && ! _ver_lt "$mac_ver" "$up_ver"; then
+            echo "    + $up_ver"
+          fi
+        done
+      fi
+    fi
+    echo ""
+    echo "  (--check: no changes made)"
+    return
+  fi
+
+  info "Pushing files to VM..."
+  _push_files "$project_root"
+
+  if [[ -n "$component" ]]; then
+    local script="$VM_TARGET/provision/install-${component}.sh"
+    vm_sudo test -f "$script" || die "No installer for component: $component (looked at $script)"
+    info "Running install-${component}.sh..."
+    vm_sudo bash "$script"
+  else
+    local upd="$VM_TARGET/provision/upgrades"
+    if vm_sudo test -d "$upd" 2>/dev/null; then
+      local applied=0
+      local f up_ver
+      for f in $(vm_sudo bash -c "ls $upd/*.sh 2>/dev/null | sort -V" 2>/dev/null); do
+        up_ver=$(basename "$f" .sh)
+        if _ver_lt "$vm_ver" "$up_ver" && ! _ver_lt "$mac_ver" "$up_ver"; then
+          info "Applying delta: $up_ver"
+          vm_sudo bash "$f"
+          applied=$((applied + 1))
+        fi
+      done
+      [[ "$applied" == "0" && "$force" != "true" ]] && info "No delta scripts to apply."
+    fi
+    _set_vm_version
+  fi
+
+  ok "Upgrade complete."
+  echo ""
+  cmd_status
+}
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 cmd_help() {
@@ -1090,6 +1276,7 @@ ${B}USAGE${N}
 
 ${B}MACHINE${N}
   init                     Create VM and install everything (~5 min)
+  upgrade [component]      Sync VM with current devvm version (non-destructive)
   destroy                  Delete VM permanently
 
 ${B}CONTROL${N}  ${D}— no target = whole VM, with target = just that stack${N}
@@ -1099,7 +1286,7 @@ ${B}CONTROL${N}  ${D}— no target = whole VM, with target = just that stack${N}
   reset [target]           Rebuild VM or reset a stack to defaults
   logs <target>            Tail logs for a stack or app
 
-  ${D}Targets: mysql, postgres, redis, nginx, grafana, prometheus,
+  ${D}Targets: mysql, postgres, redis, nginx, minio, grafana, prometheus,
   loki, tempo, cadvisor, obs, or any app name${N}
 
 ${B}APPS${N}
@@ -1109,7 +1296,7 @@ ${B}APPS${N}
   app remove <name>        Unregister and clean up
 
 ${B}DATA${N}
-  db <mysql|psql|redis>    Connect to database shell
+  db <mysql|psql|redis|minio>  Connect to database / mc client
   creds                    List credentials (masked)
   creds show <service>     Show full credentials
   creds set <service>      Update credentials (--user, --pass, --db)
@@ -1126,7 +1313,7 @@ ${B}VM ACCESS${N}
   ssh [command]            Shell into VM, or run one command
   run <cmd>                Run command as user
   exec <cmd>               Run command as root
-  open <ui>                Open web UI (grafana|adminer|prometheus)
+  open <ui>                Open web UI (grafana|adminer|prometheus|minio)
 
 ${B}INFO${N}
   status                   Show languages, databases, observability, apps
@@ -1137,6 +1324,9 @@ ${B}INFO${N}
 
 ${B}EXAMPLES${N}
   devvm init                            Create and provision
+  devvm upgrade                         Sync VM after 'brew upgrade devvm'
+  devvm upgrade --check                 Show what an upgrade would change
+  devvm upgrade minio                   Install/refresh just MinIO
   devvm stop mysql                      Stop just MySQL
   devvm restart grafana                 Restart Grafana
   devvm logs redis                      Tail Redis logs
@@ -1159,6 +1349,7 @@ main() {
 
   case "$cmd" in
     init)                 cmd_init "$@" ;;
+    upgrade)              cmd_upgrade "$@" ;;
     start|up)             cmd_start "$@" ;;
     stop|down)            cmd_stop "$@" ;;
     restart)              cmd_restart "$@" ;;

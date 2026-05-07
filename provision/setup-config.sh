@@ -5,18 +5,40 @@ echo "==> Setting up config directory..."
 
 mkdir -p /opt/dev-vm/config
 
-# Seed credentials.json if it doesn't exist
-if [ ! -f /opt/dev-vm/config/credentials.json ]; then
-  cat > /opt/dev-vm/config/credentials.json << 'EOF'
-{
-  "mysql": {"user": "dev", "pass": "dev", "host": "127.0.0.1", "port": 3306, "db": "devdb"},
-  "postgres": {"user": "dev", "pass": "dev", "host": "127.0.0.1", "port": 5432, "db": "devdb"},
-  "redis": {"pass": "", "host": "127.0.0.1", "port": 6379},
-  "grafana": {"user": "admin", "pass": "admin", "port": 3000}
+# Seed/merge credentials.json. On fresh install creates the file; on upgrade
+# adds any missing service blocks without overwriting existing values.
+CRED_FILE=/opt/dev-vm/config/credentials.json
+python3 - <<'PY'
+import json, os
+
+path = "/opt/dev-vm/config/credentials.json"
+defaults = {
+    "mysql":    {"user": "dev", "pass": "dev", "host": "127.0.0.1", "port": 3306, "db": "devdb"},
+    "postgres": {"user": "dev", "pass": "dev", "host": "127.0.0.1", "port": 5432, "db": "devdb"},
+    "redis":    {"pass": "", "host": "127.0.0.1", "port": 6379},
+    "grafana":  {"user": "admin", "pass": "admin", "port": 3000},
+    "minio":    {"user": "dev", "pass": "devdevdev", "host": "127.0.0.1", "port": 9000, "console": 9001},
 }
-EOF
-  echo "  Created credentials.json"
-fi
+
+if os.path.exists(path):
+    with open(path) as f:
+        current = json.load(f)
+    added = []
+    for k, v in defaults.items():
+        if k not in current:
+            current[k] = v
+            added.append(k)
+    if added:
+        with open(path, "w") as f:
+            json.dump(current, f, indent=2)
+        print(f"  Merged into credentials.json: {', '.join(added)}")
+    else:
+        print("  credentials.json already up to date")
+else:
+    with open(path, "w") as f:
+        json.dump(defaults, f, indent=2)
+    print("  Created credentials.json")
+PY
 
 # Seed apps.json if it doesn't exist
 if [ ! -f /opt/dev-vm/config/apps.json ]; then

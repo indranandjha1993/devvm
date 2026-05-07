@@ -1,6 +1,6 @@
 # Databases
 
-Three databases are pre-installed and running as systemd services.
+Four data services are pre-installed and running as systemd services: MySQL, PostgreSQL, Redis, and MinIO (S3-compatible object storage).
 
 ## MySQL
 
@@ -114,6 +114,63 @@ devvm reset redis              # removes any password
 
 **Monitoring**: Redis metrics via redis_exporter. View the [Redis dashboard](http://dev.orb.local:3000/d/redis) in Grafana.
 
+## MinIO (S3-compatible object storage)
+
+| | |
+|-|-|
+| API port | 9000 |
+| Console port | 9001 |
+| User | `dev` |
+| Password | `devdevdev` (≥ 8 chars required by MinIO) |
+| Default bucket | `dev` |
+| Data dir | `/var/lib/minio/data` |
+
+**Connect from CLI** (uses bundled `mc` client, alias `local`):
+```bash
+devvm db minio ls local                  # list buckets
+devvm db minio mb local/photos           # create a new bucket
+devvm db minio cp ./file.txt local/dev/  # upload
+devvm db minio cat local/dev/file.txt    # read
+```
+
+**Connect from Mac** with any S3 SDK / tool:
+```
+Endpoint:   http://dev.orb.local:9000
+Region:     us-east-1   (any value works for MinIO)
+Access key: dev
+Secret key: devdevdev
+Path-style: true        (required — MinIO does not support virtual-hosted-style)
+```
+
+**Web console**: http://dev.orb.local:9001 — login with `dev` / `devdevdev`. Or:
+```bash
+devvm open minio
+```
+
+**Manage**:
+```bash
+devvm stop minio
+devvm start minio
+devvm restart minio
+devvm logs minio
+devvm reset minio        # resets to dev/devdevdev (data preserved)
+```
+
+**Monitoring**: MinIO exposes Prometheus metrics at `/minio/v2/metrics/cluster`. The scrape job `minio` is pre-configured in Prometheus (no auth — set via `MINIO_PROMETHEUS_AUTH_TYPE=public`).
+
+**Use in code** (Python):
+```python
+import boto3
+s3 = boto3.client(
+    "s3",
+    endpoint_url="http://dev.orb.local:9000",
+    aws_access_key_id="dev",
+    aws_secret_access_key="devdevdev",
+    region_name="us-east-1",
+)
+s3.upload_file("local.txt", "dev", "remote.txt")
+```
+
 ## Adminer
 
 Web-based database admin UI at **http://dev.orb.local:8080**.
@@ -129,6 +186,7 @@ devvm creds                              # list all (masked)
 devvm creds show mysql                   # full details
 devvm creds set mysql --pass newpass     # change password
 devvm creds set postgres --user admin --pass secret --db mydb
+devvm creds set minio --pass NewSecret8  # MinIO requires ≥ 8 chars
 devvm creds reset mysql                  # back to dev/dev
 ```
 

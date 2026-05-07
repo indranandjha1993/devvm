@@ -72,4 +72,10 @@ fi
 
 echo "Adminer: installed at /opt/adminer"
 
+# --- MinIO ---
+echo "--- Configuring MinIO ---"
+if [ -f "$(dirname "$0")/install-minio.sh" ]; then
+    bash "$(dirname "$0")/install-minio.sh"
+fi
+
 echo "==> All databases configured."

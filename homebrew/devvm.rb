@@ -1,10 +1,10 @@
 class Devvm < Formula
   desc "Developer VM manager - multi-stack dev environment with observability"
   homepage "https://github.com/indranandjha1993/devvm"
-  url "https://github.com/indranandjha1993/devvm/archive/refs/tags/v2.1.0.tar.gz"
+  url "https://github.com/indranandjha1993/devvm/archive/refs/tags/v2.2.0.tar.gz"
   sha256 "" # Will be filled after release
   license "MIT"
-  version "2.1.0"
+  version "2.2.0"
 
   depends_on "orbstack" => :optional
 
@@ -30,10 +30,11 @@ class Devvm < Formula
     <<~EOS
       OrbStack is required: https://orbstack.dev
 
-      Quick start:
-        devvm init        # Create the VM
-        devvm provision   # Install all stacks + observability
-        devvm up          # Start everything
+      First time:
+        devvm init        # Create the VM and install everything
+
+      After every 'brew upgrade devvm':
+        devvm upgrade     # Sync the VM with the new devvm version (non-destructive)
 
       Support files installed to: #{share}/devvm
     EOS

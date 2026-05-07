@@ -1,0 +1,30 @@
+[Unit]
+Description=MinIO S3-compatible Object Storage
+Documentation=https://docs.min.io
+After=network-online.target
+Wants=network-online.target
+AssertFileIsExecutable=/usr/local/bin/minio
+AssertFileNotEmpty=/etc/default/minio
+
+[Service]
+Type=notify
+User=minio-user
+Group=minio-user
+EnvironmentFile=/etc/default/minio
+ExecStartPre=/bin/bash -c "if [ -z \"${MINIO_VOLUMES}\" ]; then echo 'MINIO_VOLUMES not set'; exit 1; fi"
+ExecStart=/usr/local/bin/minio server $MINIO_OPTS $MINIO_VOLUMES
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+TasksMax=infinity
+TimeoutStopSec=30
+
+# Hardening
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ReadWritePaths=/var/lib/minio
+
+[Install]
+WantedBy=multi-user.target

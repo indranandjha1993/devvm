@@ -103,15 +103,19 @@ echo -e "${BOLD}System Services:${NC}"
 check_service "mysql"
 check_service "postgresql"
 check_service "redis-server"
+check_service "minio"
 check_service "docker"
 check_service "nginx"
 
 echo ""
 echo -e "${BOLD}Database Ports:${NC}"
-check_port "MySQL"      3306
-check_port "PostgreSQL" 5432
-check_port "Redis"      6379
-check_port "Adminer"    8080
+check_port "MySQL"          3306
+check_port "PostgreSQL"     5432
+check_port "Redis"          6379
+check_port "Adminer"        8080
+check_port "MinIO API"      9000
+check_port "MinIO Console"  9001
+check      "MinIO live"     "curl -fs http://127.0.0.1:9000/minio/health/live"
 
 echo ""
 echo -e "${BOLD}Observability (Docker):${NC}"

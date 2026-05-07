@@ -33,7 +33,7 @@ Your app is live at `http://myapi.dev.local` with Nginx, systemd, and Grafana me
 | Category | What you get |
 |----------|-------------|
 | [**Languages**](docs/languages.md) | Node.js 22, Python 3.13, PHP 8.4, Go 1.22, Rust, Java 21 |
-| [**Databases**](docs/databases.md) | MySQL :3306, PostgreSQL :5432, Redis :6379, Adminer :8080 |
+| [**Databases**](docs/databases.md) | MySQL :3306, PostgreSQL :5432, Redis :6379, MinIO :9000/:9001, Adminer :8080 |
 | [**Observability**](docs/observability.md) | Grafana :3000, Prometheus :9090, Loki :3100, Tempo :3200 — 9 dashboards |
 | [**App Hosting**](docs/apps.md) | Nginx reverse proxy — each app gets `appname.dev.local` |
 | [**Debugging**](docs/debugging.md) | Remote debuggers for all languages with VS Code configs |
@@ -111,7 +111,7 @@ devvm status                   # Show everything
 devvm verify                   # Health check
 ```
 
-**Stacks**: `mysql`, `postgres`, `redis`, `nginx`, `grafana`, `prometheus`, `loki`, `tempo`, `promtail`, `cadvisor`, `obs`, or any app name.
+**Stacks**: `mysql`, `postgres`, `redis`, `minio`, `nginx`, `grafana`, `prometheus`, `loki`, `tempo`, `promtail`, `cadvisor`, `obs`, or any app name.
 
 ---
 
