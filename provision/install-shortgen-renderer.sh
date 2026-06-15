@@ -26,20 +26,21 @@ apt-get update -y
 apt-get install -y --no-install-recommends ffmpeg fontconfig curl
 echo "ffmpeg: $(ffmpeg -version 2>/dev/null | head -1 || echo 'install failed')"
 
-# --- Oswald font (best-effort; libass falls back to a sans serif if absent) ---
-if ! fc-list 2>/dev/null | grep -qi oswald; then
-    mkdir -p "${FONT_DIR}"
-    base="https://github.com/google/fonts/raw/main/ofl/oswald"
-    for v in Bold SemiBold Medium Regular; do
-        curl -fsSL --retry 3 -o "${FONT_DIR}/Oswald-${v}.ttf" "${base}/static/Oswald-${v}.ttf" || true
-    done
-    # Variable-font fallback if the static files were unavailable
-    if ! ls "${FONT_DIR}"/Oswald-*.ttf &>/dev/null; then
-        curl -fsSL --retry 3 -o "${FONT_DIR}/Oswald.ttf" "${base}/Oswald%5Bwght%5D.ttf" || true
-    fi
-    fc-cache -f "${FONT_DIR}" >/dev/null 2>&1 || true
+# --- Oswald font (Google Fonts variable TTF; covers all weights) ---
+mkdir -p "${FONT_DIR}"
+if [ ! -s "${FONT_DIR}/Oswald.ttf" ]; then
+    curl -fsSL --retry 3 -o "${FONT_DIR}/Oswald.ttf" \
+        "https://github.com/google/fonts/raw/main/ofl/oswald/Oswald%5Bwght%5D.ttf" || true
+    [ -s "${FONT_DIR}/Oswald.ttf" ] || rm -f "${FONT_DIR}/Oswald.ttf"
 fi
-fc-list 2>/dev/null | grep -qi oswald && echo "Oswald font: OK" || echo "WARN: Oswald not registered — captions will use the default sans"
+fc-cache -f "${FONT_DIR}" >/dev/null 2>&1 || true
+fc-cache -f >/dev/null 2>&1 || true
+# fc-match is what libass resolves with — the reliable "is Oswald usable?" check.
+if fc-match Oswald 2>/dev/null | grep -qi oswald; then
+    echo "Oswald font: OK"
+else
+    echo "WARN: Oswald not registered — captions will use the default sans"
+fi
 
 # --- Service code ---
 mkdir -p "${SVC_HOME}"

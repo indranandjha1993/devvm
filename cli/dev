@@ -3,7 +3,7 @@
 # https://github.com/indranandjha1993/devvm
 set -euo pipefail
 
-readonly VERSION="2.3.0"
+readonly VERSION="2.3.1"
 readonly VM_NAME="dev"
 readonly VM_TARGET="/opt/dev-vm"
 readonly VM_CONFIG="$VM_TARGET/config"
