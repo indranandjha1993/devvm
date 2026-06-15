@@ -3,7 +3,7 @@
 # https://github.com/indranandjha1993/devvm
 set -euo pipefail
 
-readonly VERSION="2.2.0"
+readonly VERSION="2.3.0"
 readonly VM_NAME="dev"
 readonly VM_TARGET="/opt/dev-vm"
 readonly VM_CONFIG="$VM_TARGET/config"
@@ -250,6 +250,9 @@ _provision() {
 
   info "Installing exporters..."
   vm_sudo bash "$VM_TARGET/provision/install-exporters.sh" 2>/dev/null || warn "Exporters install had issues (may need retry)"
+
+  info "Installing ShortGen render service..."
+  vm_sudo bash "$VM_TARGET/provision/install-shortgen-renderer.sh" 2>/dev/null || warn "ShortGen renderer install had issues (may need retry)"
 
   # Add user to docker group
   vm_sudo usermod -aG docker "$(vm whoami 2>/dev/null || echo indranandjha)" 2>/dev/null || true
