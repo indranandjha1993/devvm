@@ -125,7 +125,6 @@ git push origin main
 |------|------|
 | CLI source | `~/Developer/personal/dev-vm/cli/dev` |
 | Version line | `cli/dev` line 6: `readonly VERSION="X.Y.Z"` |
-| Homebrew formula (source) | `~/Developer/personal/dev-vm/homebrew/devvm.rb` |
-| Homebrew formula (tap) | `~/Developer/personal/homebrew-tap/Formula/devvm.rb` |
+| Homebrew formula | `~/Developer/personal/homebrew-tap/Formula/devvm.rb` (the only copy — edit it there) |
 | Local tap cache | `/opt/homebrew/Library/Taps/indranandjha1993/homebrew-tap/` |
 | Installed binary | `/opt/homebrew/bin/devvm` |
