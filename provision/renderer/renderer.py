@@ -22,7 +22,7 @@ FONT_NAME = os.environ.get("RENDERER_FONT", "Oswald")
 PRESET = os.environ.get("RENDERER_PRESET", "veryfast")
 CRF = os.environ.get("RENDERER_CRF", "20")
 # Optional speedup: rewrite a public asset host to a VM-local one to skip the
-# cloudflare round-trip (e.g. S3_REWRITE_FROM=https://s3-local.orrava.in
+# external round-trip (e.g. S3_REWRITE_FROM=https://<s3-hostname>
 # S3_REWRITE_TO=http://127.0.0.1:9000). Off by default.
 S3_REWRITE_FROM = os.environ.get("S3_REWRITE_FROM", "")
 S3_REWRITE_TO = os.environ.get("S3_REWRITE_TO", "")

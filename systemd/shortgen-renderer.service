@@ -12,8 +12,8 @@ Group=shortgen
 Environment=RENDERER_PORT=8088
 Environment=RENDERER_FONT=Oswald
 Environment=RENDER_CONCURRENCY=1
-# Optional VM-local asset fetch (skip cloudflare round-trip). Uncomment to enable:
-# Environment=S3_REWRITE_FROM=https://s3-local.orrava.in
+# Optional VM-local asset fetch (skip external round-trip). Uncomment to enable:
+# Environment=S3_REWRITE_FROM=https://<s3-hostname>
 # Environment=S3_REWRITE_TO=http://127.0.0.1:9000
 ExecStart=/usr/bin/python3 /opt/shortgen-renderer/renderer.py
 Restart=always
