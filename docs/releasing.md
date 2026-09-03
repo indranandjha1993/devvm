@@ -30,28 +30,28 @@ Update the version in `cli/dev`:
 
 ```bash
 # Line 6 in cli/dev
-readonly VERSION="2.2.0"
+readonly VERSION="X.Y.Z"
 ```
 
 Commit:
 
 ```bash
 git add cli/dev
-git commit -m "Bump to v2.2.0"
+git commit -m "Bump to vX.Y.Z"
 git push origin main
 ```
 
 ## 4. Create a Tag
 
 ```bash
-git tag v2.2.0
-git push origin v2.2.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 ## 5. Get the New SHA
 
 ```bash
-curl -sL "https://github.com/indranandjha1993/devvm/archive/refs/tags/v2.2.0.tar.gz" | shasum -a 256
+curl -sL "https://github.com/indranandjha1993/devvm/archive/refs/tags/vX.Y.Z.tar.gz" | shasum -a 256
 ```
 
 Copy the hash output.
@@ -65,7 +65,7 @@ cd ~/Developer/personal/homebrew-tap
 Edit `Formula/devvm.rb` — update **two** fields:
 
 ```ruby
-url "https://github.com/indranandjha1993/devvm/archive/refs/tags/v2.2.0.tar.gz"
+url "https://github.com/indranandjha1993/devvm/archive/refs/tags/vX.Y.Z.tar.gz"
 sha256 "PASTE_NEW_SHA_HERE"
 ```
 
@@ -73,7 +73,7 @@ Commit and push:
 
 ```bash
 git add Formula/devvm.rb
-git commit -m "Update devvm to v2.2.0"
+git commit -m "Update devvm to vX.Y.Z"
 git push origin main
 ```
 
